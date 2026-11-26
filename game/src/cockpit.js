@@ -8,7 +8,7 @@
 // texture, redrawn ~12 times a second, so every needle is the sim's own number.
 //
 // Plane-local coordinates: nose is -z, up is +y, the pilot's eyes are at
-// (0, 0.75, 0.50) and the panel sits at z = -0.72. The group is added to the
+// (0, 0.85, 0.50) and the panel sits at z = -0.72. The group is added to the
 // plane's group, so it inherits position, heading, pitch and bank.
 import * as THREE from '../vendor/three.module.min.js';
 import { FLIGHT } from './config.js';
@@ -71,17 +71,27 @@ export function buildCockpit(planeGroup) {
   group.add(panelBack);
 
   // --- Glareshield, its shadow, and the magnetic compass on top. ------------
+  // Stage G, second pass: the glareshield sits LOWER (y 0.77, was 0.80) — with
+  // the eye raised to 0.85 (main.js), the sightline over its lip now reaches
+  // ~3.5° below the horizon, so the runway threshold is visible on final
+  // approach instead of hiding behind the panel. It still sits just above the
+  // panel top (0.745), so no gauge is covered.
   const glareshield = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.07, 0.38), darkLeather);
-  glareshield.position.set(0, 0.80, -0.60);
+  glareshield.position.set(0, 0.77, -0.60);
   glareshield.rotation.x = 0.15;
   group.add(glareshield);
   // The glareshield's own shadow: a translucent dark plane hanging below its lip
   // over the top of the panel, so the panel's top edge sits in shade.
+  // Stage G: SHARPER — the old shadow was a wide (0.42 m) soft band at 0.22,
+  // a grey wash over the compass tape. Now it is a tight (0.30 m) band at 0.32:
+  // a crisp line of shade with a visible edge, the way a real glareshield
+  // throws one at noon — and it stops above the six-pack, so no gauge is ever
+  // shaded.
   const glareshadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.5, 0.42),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }),
+    new THREE.PlaneGeometry(1.5, 0.30),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }),
   );
-  glareshadow.position.set(0, 0.58, -0.70);
+  glareshadow.position.set(0, 0.61, -0.70);
   glareshadow.rotation.x = 0.35;
   group.add(glareshadow);
   const compassCanvas = document.createElement('canvas');
@@ -94,7 +104,7 @@ export function buildCockpit(planeGroup) {
     new THREE.PlaneGeometry(0.30, 0.056),
     new THREE.MeshBasicMaterial({ map: compassTex }),
   );
-  compass.position.set(0, 0.86, -0.62);
+  compass.position.set(0, 0.83, -0.62);
   compass.rotation.x = -0.5;
   group.add(compass);
 
@@ -102,10 +112,14 @@ export function buildCockpit(planeGroup) {
   //  pillars and top bar are TALLER (the windshield opens upward) — they used to
   //  end at y 1.06, right where the raised wing now sits, and the short frame
   //  pinched the view.
+  // Stage G: the pillars are SLIMMER (0.045, was 0.06) and set a touch wider
+  // (±0.76, was ±0.72) with less lean — the Stage F pillars were still thick
+  // black bars eating the corners of the windshield. The world through the
+  // glass opens up a little more on both sides.
   for (const side of [-1, 1]) {
-    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.15, 0.06), darkLeather);
-    pillar.position.set(side * 0.72, 0.68, -0.88);
-    pillar.rotation.z = -side * 0.22;
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.045, 1.15, 0.045), darkLeather);
+    pillar.position.set(side * 0.76, 0.68, -0.88);
+    pillar.rotation.z = -side * 0.18;
     pillar.rotation.x = 0.15;
     group.add(pillar);
   }
@@ -121,7 +135,7 @@ export function buildCockpit(planeGroup) {
   //  the wing.
   for (const side of [-1, 1]) {
     const wall = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, 1.7), interior);
-    wall.position.set(side * 0.86, 0.35, 0.05);
+    wall.position.set(side * 0.86, 0.38, 0.05);
     group.add(wall);
   }
   const headliner = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.05, 1.0), interior);
@@ -133,6 +147,25 @@ export function buildCockpit(planeGroup) {
   const bulkhead = new THREE.Mesh(new THREE.BoxGeometry(1.72, 1.4, 0.05), interior);
   bulkhead.position.set(0, 0.3, 1.0);
   group.add(bulkhead);
+
+  // Stage G: SUN PATCHES — hard-edged rectangles of bright midday light on the
+  // floor and the console top, where the high sun shines in through the
+  // windshield. A real cockpit at noon has them: a crisp lit shape with a
+  // visible edge, not a uniform glow. They sit low (floor, console), clear of
+  // the panel, so no gauge is ever washed out. Additive, so they lift the dark
+  // floor without painting it white.
+  const patchMat = new THREE.MeshBasicMaterial({
+    color: 0xfff3da, transparent: true, opacity: 0.35,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const floorPatch = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.7), patchMat);
+  floorPatch.rotation.x = -Math.PI / 2;
+  floorPatch.position.set(0.1, -0.49, -0.45);
+  group.add(floorPatch);
+  const consolePatch = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.8), patchMat);
+  consolePatch.rotation.x = -Math.PI / 2;
+  consolePatch.position.set(0, -0.235, -0.35);
+  group.add(consolePatch);
 
   // --- Yoke: column + wheel, moving with the stick. ---------------------------
   const yoke = new THREE.Group();
@@ -218,6 +251,15 @@ export function buildCockpit(planeGroup) {
   group.add(cabinLight);
 
   planeGroup.add(group);
+
+  // Stage G: the cockpit joins the real shadow system, but only two meshes
+  // cast — the glareshield (its shade falls on the panel top, the sharp shadow
+  // the user asked for) and the headliner (its shade falls on the panel's upper
+  // edge). Everything else in here stays non-casting: the fuselage shell does
+  // not cast either (plane.js), so the sun still reaches the cabin through the
+  // windshield instead of the pilot flying in a black box.
+  glareshield.castShadow = true;
+  headliner.castShadow = true;
 
   // --- The live gauges ---------------------------------------------------------
   const gauges = {

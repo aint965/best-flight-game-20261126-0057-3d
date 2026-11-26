@@ -9,7 +9,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { BEST_KEY, MAX_FRAME, MISSION_DEFS, SCORE_RULES, STEP } from './config.js';
 import { ISLANDS, groundAt, homeSpawn, onStrip } from './world.js';
-import { buildWorld } from './terrain.js';
+import { buildWorld, updateSunShadow } from './terrain.js';
 import { buildPlane } from './plane.js';
 import { buildCockpit } from './cockpit.js';
 import { buildRings } from './rings.js';
@@ -37,13 +37,23 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.06;
+// Stage G: real shadow maps. The gamedev skill threejs-materials-lighting says
+// r160 gets PCFSoftShadowMap (PCFShadowMap only turns soft in r182+; in r160 it
+// is the blocky one) — verified present in the vendored three.module.min.js.
+// Sharpness comes from the 2048 map on a tight 640 m frustum that rides the
+// plane (updateSunShadow, terrain.js), not from the filter: the edges read
+// defined, ~1 texel wide, without the stair-step aliasing PCF would show.
+// Exposure drops a touch with the stronger sun (2.5) so the lit side does not
+// blow out.
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.5, 20000);
 camera.position.set(600, 140, 900);
 
-const { stormWall } = buildWorld(scene);
+const { stormWall, sun } = buildWorld(scene);
 const plane = buildPlane(scene);
 const cockpit = buildCockpit(plane.group);
 const rings = buildRings(scene);
@@ -51,8 +61,9 @@ const rings = buildRings(scene);
 // A cool daylight fill light that rides with the camera, pointed at the plane:
 // it lights whatever the camera looks at, so the plane's camera-facing side never
 // goes black when the sun is behind it (Stage B's landing frame was a dark
-// silhouette). Kept modest (0.5) so the midday light is lifted, not flattened.
-const fillLight = new THREE.DirectionalLight(0xdfeaf8, 0.5);
+// silhouette). Stage G: kept modest (0.35, was 0.5) — a strong fill would wash
+// out the new sun/shadow contrast the user asked to sharpen.
+const fillLight = new THREE.DirectionalLight(0xdfeaf8, 0.35);
 fillLight.position.set(0, 200, 500);
 scene.add(fillLight);
 scene.add(fillLight.target);
@@ -66,6 +77,11 @@ let flight = createFlight(homeSpawn());
 let mission = createMission('rings');
 let camMode = 'chase';
 let camSettled = false;
+// Stage G (skill camera-systems): the look-ahead point is its own smoothed
+// state — the camera aims at this, not at the raw 40 m-ahead point, so a
+// heading reversal eases instead of snapping the view.
+const lookTarget = new THREE.Vector3(0, 0, 0);
+let lookInit = false;
 let soundOn = true;
 let autopilotOn = false;
 // Menu state (Stage E): which mission the briefing card is showing, and where the
@@ -321,7 +337,15 @@ function updateCamera(dt) {
     // In the pilot's seat: the camera sits at the eye point and takes the
     // plane's own orientation, so the view banks and pitches with the aircraft.
     // Snapped, not lerped — a lerped cockpit would lag the plane it sits in.
-    const eye = new THREE.Vector3(0, 0.75, 0.50);
+    // Stage G, second pass: the eye is HIGHER (y 0.85, was 0.75). At 0.75 the
+    // eye sat 5 cm BELOW the glareshield lip, so the sightline over the lip
+    // pointed UP (+2°) and the whole runway hid behind the panel on final —
+    // the approach shot showed sky and a sliver of horizon, no runway. At
+    // 0.85 the eye is 8 cm above the lowered lip (0.77) and the sightline
+    // reaches ~3.5° below the horizon: the threshold is visible. The wing
+    // (y 1.36) now grazes the top edge of the frame as a thin pale strip —
+    // the intended Stage G look, not the old red wall.
+    const eye = new THREE.Vector3(0, 0.85, 0.50);
     plane.group.localToWorld(eye);
     camera.position.copy(eye);
     camera.quaternion.copy(plane.group.quaternion);
@@ -337,11 +361,36 @@ function updateCamera(dt) {
   const tx = flight.x - fx * dist;
   const ty = flight.y + height;
   const tz = flight.z - fz * dist;
-  const k = camSettled ? 1 - Math.exp(-dt * 4.5) : 1;
-  camera.position.x += (tx - camera.position.x) * k;
-  camera.position.y += (ty - camera.position.y) * k;
-  camera.position.z += (tz - camera.position.z) * k;
-  camera.lookAt(flight.x + fx * 40, flight.y + 2, flight.z + fz * 40);
+  // Skill camera-systems: exponential smoothing, 1 - exp(-rate * dt), rate 5.5
+  // (inside the skill's ~5–12 range) — the chase already used this shape at
+  // rate 4.5; the rate is now inside the range. The deadzone below stops the
+  // camera micro-drifting forever once it is within 1.5 m of its target.
+  const k = camSettled ? 1 - Math.exp(-dt * 5.5) : 1;
+  const dx = tx - camera.position.x;
+  const dy = ty - camera.position.y;
+  const dz = tz - camera.position.z;
+  if (dx * dx + dy * dy + dz * dz > 1.5 * 1.5) {
+    camera.position.x += dx * k;
+    camera.position.y += dy * k;
+    camera.position.z += dz * k;
+  }
+  // Look-ahead with easing: the camera aims 40 m ahead of the nose (it leads
+  // the direction of travel), but the aim point itself is exponentially
+  // smoothed at rate 3 — a heading reversal swings the view instead of
+  // snapping it.
+  const lx = flight.x + fx * 40;
+  const ly = flight.y + 2;
+  const lz = flight.z + fz * 40;
+  if (!lookInit) {
+    lookTarget.set(lx, ly, lz);
+    lookInit = true;
+  } else {
+    const lk = 1 - Math.exp(-dt * 3);
+    lookTarget.x += (lx - lookTarget.x) * lk;
+    lookTarget.y += (ly - lookTarget.y) * lk;
+    lookTarget.z += (lz - lookTarget.z) * lk;
+  }
+  camera.lookAt(lookTarget);
   // The fill light rides the camera and points at the plane.
   fillLight.position.copy(camera.position);
   fillLight.target.position.set(flight.x, flight.y, flight.z);
@@ -471,9 +520,9 @@ function runShot(name) {
       rings: rings.rings, nextRing: rings.nextIndex(),
       frontX: stormWall.position.x, storm: mission.id === 'storm',
     });
-    // Stage F: force-draw the cockpit panel on the first paint so a cockpit
-    // screenshot never catches a blank panel (the live loop redraws it every
-    // fifth frame instead).
+    // Stage G: the shadow camera rides the plane — update it before every
+    // paint, or the shadows lag a frame behind the aircraft.
+    updateSunShadow(sun, flight.x, flight.y, flight.z);
     cockpit.update(flight, { pitch: 0, roll: 0, yaw: 0 }, 0, true);
     renderer.render(scene, camera);
     painted += 1;
@@ -502,7 +551,13 @@ function runGame() {
 
   function frame(now) {
     requestAnimationFrame(frame);
-    accumulator += Math.min((now - last) / 1000, MAX_FRAME);
+    // Stage G (skill camera-systems): the chase smoothing takes the REAL frame
+    // delta, not a fixed 1/60 — with a fixed dt the follow feel changed with
+    // the frame rate (at 144 fps the same k per frame converges more than twice
+    // as fast in wall-clock time). The physics accumulator still eats fixed
+    // steps; only the camera gets the real dt.
+    const frameDt = Math.min((now - last) / 1000, MAX_FRAME);
+    accumulator += frameDt;
     last = now;
     handleActions();
     if (screen === 'title') {
@@ -543,7 +598,15 @@ function runGame() {
       }
       elapsed += 1 / 60;
       rings.update(elapsed);
-      updateCamera(1 / 60);
+      // Late update, after the sim steps moved the plane (skill camera-systems):
+      // the camera follows flight state, not plane.group, so it is never a
+      // frame behind the aircraft. The camera is not parented to the plane —
+      // it lives in the scene root and follows by code, so no shake or bank
+      // ever leaks into it. (There is no free-look and no shake in this game:
+      // the cockpit camera copies the airframe quaternion, so the skill's
+      // ±80° pitch clamp has nothing to clamp — the pitch is the flight
+      // model's, and the model limits it.)
+      updateCamera(frameDt);
       audio.engine(flight.throttle, !flight.onGround);
     }
     plane.update(flight);
@@ -552,6 +615,7 @@ function runGame() {
       rings: rings.rings, nextRing: rings.nextIndex(),
       frontX: stormWall.position.x, storm: mission.id === 'storm',
     });
+    updateSunShadow(sun, flight.x, flight.y, flight.z);
     renderer.render(scene, camera);
     if (!window.__ready) window.__ready = true;
   }
@@ -587,6 +651,67 @@ window.__game = {
   /** The cockpit's live gauge values, for the driver to prove the needles move. */
   get cockpitGauges() {
     return { ...cockpit.gauges };
+  },
+  /** Stage G: the driver proves the real shadow system is on (PCFSoft in r160). */
+  get shadows() {
+    return renderer.shadowMap.enabled && renderer.shadowMap.type === THREE.PCFSoftShadowMap;
+  },
+  /**
+   * Stage G (skill threejs-materials-lighting verification): the whole light
+   * rig as the driver can see it — every light with its intensity and whether
+   * it casts, the shadow map settings, how many meshes cast/receive, and the
+   * tone mapping. If a shadow goes missing, the skill says to check the three
+   * places first: renderer.shadowMap.enabled, light.castShadow, and the
+   * per-mesh flags — this getter exposes all three at once.
+   */
+  get lightRig() {
+    const lights = [];
+    let casters = 0;
+    let receivers = 0;
+    scene.traverse((obj) => {
+      if (obj.isLight) {
+        lights.push({
+          type: obj.type,
+          intensity: obj.intensity,
+          castShadow: !!obj.castShadow,
+          color: obj.color ? `#${obj.color.getHexString()}` : null,
+        });
+      }
+      if (obj.isMesh) {
+        if (obj.castShadow) casters += 1;
+        if (obj.receiveShadow) receivers += 1;
+      }
+    });
+    return {
+      lights,
+      shadowCasters: casters,
+      shadowReceivers: receivers,
+      shadowMap: {
+        enabled: renderer.shadowMap.enabled,
+        type: renderer.shadowMap.type,
+        // PCFSoftShadowMap === 2 in three r160.
+        typeName: renderer.shadowMap.type === THREE.PCFSoftShadowMap ? 'PCFSoftShadowMap'
+          : renderer.shadowMap.type === THREE.PCFShadowMap ? 'PCFShadowMap' : 'other',
+      },
+      toneMapping: {
+        // ACESFilmicToneMapping === 4 in three r160.
+        typeName: renderer.toneMapping === THREE.ACESFilmicToneMapping ? 'ACESFilmic' : 'other',
+        exposure: renderer.toneMappingExposure,
+      },
+      sunShadow: {
+        mapSize: sun.shadow.mapSize.x,
+        bias: sun.shadow.bias,
+        normalBias: sun.shadow.normalBias,
+        camera: {
+          left: sun.shadow.camera.left,
+          right: sun.shadow.camera.right,
+          top: sun.shadow.camera.top,
+          bottom: sun.shadow.camera.bottom,
+          near: sun.shadow.camera.near,
+          far: sun.shadow.camera.far,
+        },
+      },
+    };
   },
   get flight() {
     return flight;

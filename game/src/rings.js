@@ -15,6 +15,9 @@ export function buildRings(scene) {
     const mesh = new THREE.Mesh(new THREE.TorusGeometry(RING.radius, RING.tube, 12, 40), mat);
     mesh.position.set(p.x, p.y, p.z);
     mesh.rotation.y = Math.PI / 2; // hoop faces west, toward the incoming plane
+    // Stage G: a gold hoop throws a real ring-shaped shadow on the grass below —
+    // the rings shot shows it under the next ring.
+    mesh.castShadow = true;
     mesh.userData.baseEmissive = 0x332200;
     scene.add(mesh);
     rings.push({ ...p, mesh, mat, passed: false, prevSide: null });

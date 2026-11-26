@@ -85,6 +85,10 @@ function textDecal(lines, w, h) {
     new THREE.PlaneGeometry(w, h),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }),
   );
+  // A decal is a flat quad floating 3 cm off the skin: in the shadow map its
+  // alpha is ignored, so it would throw a solid rectangle's shadow on the
+  // fuselage. It never casts.
+  mesh.userData.noShadow = true;
   return mesh;
 }
 
@@ -159,12 +163,23 @@ export function buildPlane(scene) {
   // 0.30 above it), so the cockpit view was a red wall with almost no world in
   // it. Raised, the leading edge sits at the TOP of the windshield, the way a
   // real high-wing reads from the seat, and the horizon opens up below it.
-  const wing = new THREE.Mesh(new THREE.BoxGeometry(11.5, 0.28, 1.9), red);
-  wing.position.set(0, 1.32, -0.4);
+  // Stage G: the wing is THINNER (0.20, was 0.28) and a touch higher (1.36),
+  // and — the real fix — its UNDERSIDE is pale, not red: a real bush plane's
+  // belly is light, and the red band the pilot saw was the wing's underside
+  // and leading edge filling the top of the windshield. From the chase camera
+  // the wing still reads red on top; from the seat it reads as a thin pale
+  // strip. BoxGeometry takes a material per face: +x, -x, +y (top), -y
+  // (underside), +z, -z.
+  const wingUnderside = new THREE.MeshLambertMaterial({ color: PALETTE.planeWhite });
+  const wing = new THREE.Mesh(
+    new THREE.BoxGeometry(11.5, 0.20, 1.9),
+    [red, red, red, wingUnderside, red, red],
+  );
+  wing.position.set(0, 1.36, -0.4);
   group.add(wing);
   for (const side of [-1, 1]) {
-    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.3, 1.9), white);
-    tip.position.set(side * 5.45, 1.32, -0.4);
+    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.22, 1.9), white);
+    tip.position.set(side * 5.45, 1.36, -0.4);
     group.add(tip);
     const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 2.9, 6), dark);
     strut.position.set(side * 2.2, 0.2, -0.4);
@@ -181,13 +196,13 @@ export function buildPlane(scene) {
   // Pitot tube under the left wing, landing light in the left leading edge.
   const pitot = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.6, 6), metal);
   pitot.rotation.x = Math.PI / 2;
-  pitot.position.set(-2.6, 1.09, -1.0);
+  pitot.position.set(-2.6, 1.13, -1.0);
   group.add(pitot);
   const landingLight = new THREE.Mesh(
     new THREE.CircleGeometry(0.16, 12),
     new THREE.MeshBasicMaterial({ color: 0xfff6d8 }),
   );
-  landingLight.position.set(-2.2, 1.27, -1.36);
+  landingLight.position.set(-2.2, 1.31, -1.36);
   landingLight.rotation.x = -Math.PI / 2;
   group.add(landingLight);
 
@@ -215,10 +230,10 @@ export function buildPlane(scene) {
   // that blinks from the tail. Real aircraft, real positions.
   const navMat = (color) => new THREE.MeshBasicMaterial({ color });
   const navPort = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), navMat(0xff2a1a));
-  navPort.position.set(-5.8, 1.32, -0.4);
+  navPort.position.set(-5.8, 1.36, -0.4);
   group.add(navPort);
   const navStarboard = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), navMat(0x2aff5a));
-  navStarboard.position.set(5.8, 1.32, -0.4);
+  navStarboard.position.set(5.8, 1.36, -0.4);
   group.add(navStarboard);
   const navTail = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), navMat(0xffffff));
   navTail.position.set(0, 0.4, 3.85);
@@ -296,14 +311,51 @@ export function buildPlane(scene) {
 
   scene.add(group);
 
-  // Soft blob shadow on the ground below the plane.
+  // Stage G: the plane casts a REAL shadow now (sun + shadow map), so the blob
+  // underneath is only a soft contact patch, not the shadow itself — and it is
+  // SOFT, the way a real contact shadow is: a radial-gradient texture (opaque
+  // in the middle, transparent at the rim) instead of a hard-edged black disc,
+  // bigger (5.0 m) and fainter (0.20). The old disc was a uniform 0.28 black
+  // circle with a razor edge — it read as a hole in the ground. Do NOT confuse
+  // the two in the report: the blob is softened on purpose; the DIRECTIONAL
+  // shadows (tree on grass, wing on fuselage, tower on shore) are the sharp
+  // ones.
+  const blobCanvas = document.createElement('canvas');
+  blobCanvas.width = 128;
+  blobCanvas.height = 128;
+  const bctx = blobCanvas.getContext('2d');
+  const bgrad = bctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+  bgrad.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
+  bgrad.addColorStop(0.55, 'rgba(0, 0, 0, 0.45)');
+  bgrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  bctx.fillStyle = bgrad;
+  bctx.fillRect(0, 0, 128, 128);
   const shadow = new THREE.Mesh(
-    new THREE.CircleGeometry(4.2, 20),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }),
+    new THREE.CircleGeometry(5.0, 20),
+    new THREE.MeshBasicMaterial({
+      map: new THREE.CanvasTexture(blobCanvas), transparent: true, opacity: 0.20, depthWrite: false,
+    }),
   );
   shadow.rotation.x = -Math.PI / 2;
   scene.add(shadow);
 
+  // Stage G: the plane is part of the real shadow system. Everything casts
+  // except the parts that must not: the fuselage is a closed shell around the
+  // cockpit — if it cast, the whole cabin would sit in its own shadow and the
+  // pilot would fly in the dark; the canopy glass for the same reason; the prop
+  // disc is a transparent blur (its shadow would be a solid disc); the decals
+  // and the tiny nav lights are not worth a shadow texel. Everything receives,
+  // so the wing's shadow falls on the fuselage top and the fuselage shades its
+  // own belly. The cockpit group is added later by buildCockpit — it sets its
+  // own flags there (only the glareshield and headliner cast).
+  group.traverse((obj) => {
+    if (!obj.isMesh) return;
+    obj.receiveShadow = true;
+    obj.castShadow = !obj.userData.noShadow;
+  });
+  fuselage.castShadow = false;
+  canopy.castShadow = false;
+  prop.children.forEach((child) => { child.castShadow = false; });
   return {
     group,
     prop,
@@ -331,7 +383,7 @@ export function buildPlane(scene) {
       const alt = Math.max(0, flight.y - gy);
       const s = Math.max(0.4, 1 - alt / 220);
       shadow.scale.set(s, s, 1);
-      shadow.material.opacity = 0.28 * s;
+      shadow.material.opacity = 0.20 * s;
     },
   };
 }

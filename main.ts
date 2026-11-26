@@ -43,6 +43,54 @@
 // TOP of the windshield, the way a real high-wing does, and the horizon opens up
 // below it. The exterior walkaround camera was also fixed: it stood behind the
 // tail (z +9) and showed the rear; it now stands three-quarter front (z -9).
+// Stage G (2026-11-26, user: "Perbaiki lagi" + "Pencahayaannya shadownya
+// pertajam lagi"): the lighting and shadows are sharpened for real. Until now
+// every shadow in the game was a painted fake — a black disc under the plane, an
+// ellipse under the clouds, a translucent plane over the panel. Now the sun casts
+// REAL shadows (PCFSoftShadowMap in our vendored three r160 — the gamedev skill
+// threejs-materials-lighting says r160 gets PCFSoft, since PCFShadowMap only
+// turns soft in r182+; verified present in three.module.min.js — 2048 map on a
+// tight 640 m orthographic shadow camera that rides the plane so the texels stay
+// small where the camera looks, bias -0.0005 + normalBias 0.5 against acne):
+// trees shade the grass, the wing shades the fuselage, the lighthouse tower
+// shades the shore, the plane shades the strip. The light rig follows the same
+// skill: one directional key at 2.5 (the skill's ~2–3 range), a hemisphere
+// fill at 0.7, a modest camera fill at 0.35 — one shadow-casting light only, no
+// point-light shadows (they would render the scene 6×). The sun is brighter
+// (2.5) and the ambient bounces weaker, so lit reads bright and shadow reads
+// deep. The same skill's three-place check (renderer.shadowMap.enabled +
+// light.castShadow + per-mesh flags) is exposed to the driver via
+// window.__game.lightRig, which lists every light, the caster count, and the
+// tone mapping. The camera follows the companion skill camera-systems: the
+// chase already smoothed exponentially (1 - exp(-rate * dt)) — rate raised
+// 4.5 → 5.5 into the skill's ~5–12 range, fed the REAL frame delta instead of
+// a fixed 1/60, with a 1.5 m deadzone and an eased 40 m look-ahead point (its
+// own rate-3 smoothing, so a heading reversal swings the view instead of
+// snapping it); the camera updates AFTER the sim steps (late update), is never
+// parented to the plane, and the cockpit has no free-look so the skill's ±80°
+// pitch clamp has nothing to clamp. The cockpit gets the same treatment — the
+// wing is thinner with a pale underside (the red band in the windshield is now a
+// thin pale strip), the A-pillars are slimmer and wider, the glareshield shadow
+// is a tight dark line, and hard-edged sun patches fall on the floor and the
+// console. Second pass (same night, after looking at the new cockpit shots):
+// the red was gone but the world was still only a slit — the eye sat 5 cm BELOW
+// the glareshield lip, so the sightline over it pointed UP and the runway hid
+// behind the panel on final. The eye is raised to 0.85 and the glareshield
+// lowered to 0.77 (compass and shadow plane move with it, side walls raised to
+// keep the eye below their top edge): the sightline now reaches ~3.5° below
+// the horizon, so the horizon, terrain, sea and volcano read through the
+// windshield and all 12 gauges stay fully readable. The runway threshold on
+// short final itself is still just below the lip — stated plainly, not hidden:
+// pushing the eye further would clip the bottom gauge row, which the brief
+// forbids. The blob under the plane goes the other way on purpose: it is only a
+// soft contact patch now (radial gradient, 0.20), NOT the shadow — the sharp
+// shadows are the directional ones. Trees are varied too (non-uniform scale, a
+// third crown cone, ~50 old-growth giants in clusters) in the same daylight
+// palette, the foreground gets denser detail plus grass tufts, the cover staging
+// moves 400 m east so the 32 m coastal lighthouse reads bigger, the minimap
+// lighthouse marker is a ringed dot, and the volcano's ash cap and crater get
+// real rock texture. Nothing else changes: midday, coastal lighthouse, live
+// gauges, menus, missions, minimap, "36"/"03", river, chase view.
 // This program copies game/ and screenshots/ from beside this file to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 // The copy is byte for byte the same on every run: no timestamps, no randomness here.

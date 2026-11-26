@@ -243,7 +243,11 @@ export function stageShot(sim, name) {
   // fits in frame as the hero, instead of filling it as a brown wall, with the
   // lighthouse on Karang's south tip sitting low mid-frame below the ring.
   // It starts near the ring's altitude so the flight is level, not a dive.
-  sim.reset({ x: 600, y: 140, z: -200, heading: 1.57, speed: 34, throttle: 72 }, 'rings');
+  // Stage G: the start moves 400 m east and 60 m south (1000, 145, -260) so the
+  // coastal lighthouse — a 32 m tower, not the old 120 m monument — reads bigger
+  // in frame without changing its realistic scale; the volcano is still ~2.9 km
+  // out and fits whole. blocksHero's cover cones moved with the new camera.
+  sim.reset({ x: 1000, y: 145, z: -260, heading: 1.57, speed: 34, throttle: 72 }, 'rings');
   const rings = sim.rings;
   let flown = 0;
   for (let t = 0; t < 6; t += STEP) {

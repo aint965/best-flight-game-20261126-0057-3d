@@ -179,11 +179,53 @@ function buildSky(scene) {
 
   // Midday light: a strong near-white sun from high above, a blue sky bounce
   // from above and a warm ground bounce from below, pale-blue fog.
-  const sun = new THREE.DirectionalLight(0xfff1d6, 2.1);
+  // Stage G: the sun now casts REAL shadows (PCFSoftShadowMap in our vendored
+  // three r160 — the gamedev skill threejs-materials-lighting says r160 gets
+  // PCFSoft, since PCFShadowMap only turns soft in r182+; the sharpness comes
+  // from the 2048 map on a tight frustum, not from the filter). Until now every
+  // shadow in the game was a painted fake (blob under the plane, ellipse under
+  // the clouds, a translucent plane over the panel). The shadow camera is a
+  // 640 m orthographic box that RIDES the plane (updateSunShadow, called every
+  // frame from main.js): a static camera over an 11 km world would smear one
+  // texel over metres, but a camera that follows the plane keeps the texels
+  // small where the camera looks — tree shadows on the grass, the plane's
+  // shadow on the strip, the lighthouse tower on the shore. Bias -0.0005 +
+  // normalBias 0.5 against acne (one assignment only — an earlier draft had a
+  // second pair below that silently overwrote these).
+  const sun = new THREE.DirectionalLight(0xfff1d6, 2.5);
   sun.position.copy(SUN_DIR).multiplyScalar(1000);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  // Stage G (skill threejs-materials-lighting): shadow acne is tuned out with a
+  // small negative bias plus a normal bias — the terrain's 61 m vertex spacing
+  // would otherwise shimmer with acne stripes in the noon sun. normalBias 0.5 m
+  // is ~1.5 texels at this frustum, small enough that no shadow visibly floats.
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.5;
+  sun.shadow.camera.left = -320;
+  sun.shadow.camera.right = 320;
+  sun.shadow.camera.top = 320;
+  sun.shadow.camera.bottom = -320;
+  sun.shadow.camera.near = 50;
+  sun.shadow.camera.far = 2200;
   scene.add(sun);
-  scene.add(new THREE.HemisphereLight(0x9cc8f0, 0x7a8a58, 0.85));
+  scene.add(sun.target);
+  // Stage G: the light/shadow contrast is stronger — the sun is brighter and
+  // the ambient bounces are weaker, so the lit side reads bright and warm and
+  // the shadow side reads deep and cool, instead of one flat grey. The camera
+  // fill light in main.js drops with it (0.5 -> 0.35) for the same reason.
+  scene.add(new THREE.HemisphereLight(0x9cc8f0, 0x7a8a58, 0.65));
   scene.fog = new THREE.Fog(PALETTE.fog, 1800, 9500);
+  return sun;
+}
+
+/** Move the shadow camera with the plane: the light sits 900 m out along the
+ *  sun direction, the target sits on the plane, so the 640 m shadow box always
+ *  covers the ground the camera is looking at. Called every frame from main.js
+ *  (and before every staged paint), or the shadows would lag a frame behind. */
+export function updateSunShadow(sun, x, y, z) {
+  sun.position.set(x + SUN_DIR.x * 900, y + SUN_DIR.y * 900, z + SUN_DIR.z * 900);
+  sun.target.position.set(x, y, z);
 }
 
 /** A seeded speckle canvas, tiled over the terrain so close ground has grain: the
@@ -199,13 +241,16 @@ function speckleTexture() {
   const rng = createRandom(SEED + 41);
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 12000; i += 1) {
-    const g = Math.floor(255 * rng.range(0.7, 1.15));
+  // Stage G: the grain was too polite to read in the landing foreground — a
+  // wider brightness range (0.62–1.20, was 0.70–1.15) and more, bigger dots, so
+  // close grass has visible grain instead of a smooth olive wash.
+  for (let i = 0; i < 16000; i += 1) {
+    const g = Math.floor(255 * rng.range(0.62, 1.2));
     ctx.fillStyle = `rgb(${g},${g},${g})`;
-    const s = rng.next() < 0.7 ? 1 : rng.next() < 0.8 ? 2 : 3;
+    const s = rng.next() < 0.6 ? 1 : rng.next() < 0.8 ? 2 : 3;
     ctx.fillRect(Math.floor(rng.next() * 256), Math.floor(rng.next() * 256), s, s);
   }
-  for (let i = 0; i < 60; i += 1) {
+  for (let i = 0; i < 90; i += 1) {
     const v = rng.range(0.85, 1.0);
     ctx.fillStyle = `rgba(${Math.floor(255 * v)},${Math.floor(255 * v)},${Math.floor(255 * v)},0.5)`;
     ctx.beginPath();
@@ -253,7 +298,10 @@ function buildTerrainMesh(scene) {
     if (h < 0.3) c.copy(cSeabed);
     else if (h < 3.2) c.copy(cSand).lerp(cGrassA, smoothstep(1.2, 3.2, h));
     else {
-      const t = clamp(0.5 + 0.5 * n + fine * 0.45 + speckle * 0.12, 0, 1);
+      // Stage G: the mottling is pushed a touch harder (fine 0.50, speckle
+      // 0.18 — was 0.45/0.12) so the ground has visible variation even where
+      // no bush or tree sits on it.
+      const t = clamp(0.5 + 0.5 * n + fine * 0.5 + speckle * 0.18, 0, 1);
       if (t < 0.5) c.copy(cGrassA).lerp(cGrassDark, t * 1.1);
       else c.copy(cGrassA).lerp(cGrassB, (t - 0.5) * 2);
       // Stage F, second pass: the dark patches were multiplied by 0.58 — deep pits
@@ -275,7 +323,12 @@ function buildTerrainMesh(scene) {
       const streak = 0.5 + 0.5 * valueNoise(ang * 14, h * 0.08, 1, SEED + 31);
       if (h > 420) {
         c.copy(cAsh).lerp(cRock, 0.12 + 0.15 * n);
-        if (h > 535 && h < 565) c.lerp(cRim, 0.45);
+        // Stage G: the ash cap was a smooth pale dome — fine noise breaks it
+        // into rock and ash, dark speckles read as boulders, and the rim ring
+        // is irregular now (it used to be a perfect circle of bright pixels).
+        c.offsetHSL(0, 0, (valueNoise(wx, wz, 9, SEED + 33) - 0.5) * 0.3);
+        if (valueNoise(wx, wz, 25, SEED + 37) > 0.62) c.lerp(cRockDark, 0.55);
+        if (h > 535 && h < 565) c.lerp(cRim, 0.45 * (0.6 + 0.4 * Math.sin(ang * 5 + n * 3)));
       } else if (h > 120) {
         const band = 0.5 + 0.5 * Math.sin(h * 0.065 + n * 2.2);
         c2.copy(cRockDark).lerp(cAsh, band * 0.8);
@@ -294,6 +347,12 @@ function buildTerrainMesh(scene) {
   geo.computeVertexNormals();
   const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, map: speckleTexture() }));
   mesh.position.set(TERRAIN_CENTER.x, 0, TERRAIN_CENTER.z);
+  // Stage G: the terrain both casts and receives the real shadows — the volcano
+  // throws shade on its own lower slopes, hills shade the ground behind them.
+  // (It does NOT self-shadow the crater floor into black: the sun is nearly
+  // overhead, and normalBias 2 m keeps the coarse mesh from acne-ing.)
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   scene.add(mesh);
 }
 
@@ -472,6 +531,9 @@ function buildRunways(scene) {
       new THREE.MeshLambertMaterial({ color: PALETTE.asphalt }),
     );
     asphalt.rotation.x = -Math.PI / 2;
+    // Stage G: the strip receives the plane's real shadow on final — the
+    // landing frame shows the aircraft's own shade on the asphalt.
+    asphalt.receiveShadow = true;
     group.add(asphalt);
     const markMat = new THREE.MeshBasicMaterial({ color: PALETTE.marking });
     for (let d = -r.length / 2 + 60; d < r.length / 2 - 50; d += 60) {
@@ -552,48 +614,99 @@ function buildTrees(scene, rng) {
     if (distToRiver(x, z) < 32) continue;
     spots.push([x, h, z, rng.range(0.8, 1.5)]);
   }
+  // Stage G: OLD GROWTH — ~50 big trees in tight clusters, the way a real forest
+  // grows (a few elders towering over the rest, not 650 identical saplings).
+  // They are extra entries in the same instanced meshes, flagged by scale > 1.8
+  // and a darker colour; the clusters sit where the dossier frames look.
+  const clusterCenters = [[-420, 480], [180, 700], [-650, -350], [1250, -500], [1750, -1150], [300, -650]];
+  for (const [cx, cz] of clusterCenters) {
+    for (let i = 0; i < 8; i += 1) {
+      const x = cx + rng.range(-110, 110);
+      const z = cz + rng.range(-110, 110);
+      const h = groundAt(x, z);
+      if (h < 3 || h > 42) continue;
+      if (onRunwayPlateau(x, z)) continue;
+      if (distToRiver(x, z) < 32) continue;
+      spots.push([x, h, z, rng.range(1.9, 2.6)]);
+    }
+  }
   const trunkGeo = new THREE.CylinderGeometry(0.45, 0.75, 3, 5);
   const coneGeo = new THREE.ConeGeometry(3.4, 9, 6);
   const cone2Geo = new THREE.ConeGeometry(2.3, 6, 6);
+  const cone3Geo = new THREE.ConeGeometry(1.5, 4, 6);
   const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2f });
   const leafMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
   const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, spots.length);
   const cones = new THREE.InstancedMesh(coneGeo, leafMat, spots.length);
   const cones2 = new THREE.InstancedMesh(cone2Geo, leafMat, spots.length);
+  const cones3 = new THREE.InstancedMesh(cone3Geo, leafMat, spots.length);
+  // Stage G: every tree casts a real shadow now (sun + shadow map), so a forest
+  // reads as a forest from the air instead of a flat green carpet.
+  trunks.castShadow = true;
+  cones.castShadow = true;
+  cones2.castShadow = true;
+  cones3.castShadow = true;
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const s = new THREE.Vector3();
   const p = new THREE.Vector3();
   const col = new THREE.Color();
   spots.forEach(([x, h, z, scale], i) => {
-    s.set(scale, scale, scale);
+    // Stage G: no two trees share a silhouette any more — the width, height and
+    // depth scales jitter independently (0.85–1.3), so the cones are squat, tall,
+    // wide or narrow at random instead of 650 copies of one cone.
+    const sx = scale * rng.range(0.85, 1.2);
+    const sy = scale * rng.range(0.85, 1.3);
+    const sz = scale * rng.range(0.85, 1.2);
+    const giant = scale > 1.8;
+    s.set(sx, sy, sz);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rng.next() * Math.PI * 2);
-    p.set(x, h + 1.5 * scale, z);
+    p.set(x, h + 1.5 * sy, z);
     m.compose(p, q, s);
     trunks.setMatrixAt(i, m);
-    p.set(x, h + (3 + 4.5) * scale, z);
+    p.set(x, h + (3 + 4.5) * sy, z);
     m.compose(p, q, s);
     cones.setMatrixAt(i, m);
-    p.set(x, h + (3 + 8) * scale, z);
+    p.set(x, h + (3 + 8) * sy, z);
     m.compose(p, q, s);
     cones2.setMatrixAt(i, m);
+    // A third, smaller top cone on ~60% of trees: a layered crown, not a smooth
+    // two-cone Christmas tree. Giants always get one — they are the layered ones.
+    const hasTop = giant || rng.next() < 0.6;
+    if (hasTop) {
+      p.set(x, h + (3 + 11) * sy, z);
+      m.compose(p, q, s);
+      cones3.setMatrixAt(i, m);
+    } else {
+      s.set(0, 0, 0);
+      p.set(x, h, z);
+      m.compose(p, q, s);
+      cones3.setMatrixAt(i, m);
+    }
     // Stage F, second pass — the tree/ground mismatch: pines were HSL(0.33–0.37,
     // 0.55, 0.28–0.40), a saturated pure green, while the ground is a muted
     // yellow-olive (hue ~0.28, sat 0.30–0.38). Now hue 0.29–0.32, sat 0.42,
     // lightness 0.30–0.42 — the same yellow-green family as the grass, a touch
     // darker and richer, so the trees sit in the ground instead of floating on it.
-    col.setHSL(0.29 + rng.next() * 0.03, 0.42, 0.30 + rng.next() * 0.12);
+    // Stage G KEEPS that palette exactly (the user only asked for shape, not
+    // colour); giants are the same hue, just darker (lightness 0.24–0.30).
+    if (giant) col.setHSL(0.29 + rng.next() * 0.02, 0.42, 0.24 + rng.next() * 0.06);
+    else col.setHSL(0.29 + rng.next() * 0.03, 0.42, 0.30 + rng.next() * 0.12);
     cones.setColorAt(i, col);
     cones2.setColorAt(i, col);
+    cones3.setColorAt(i, col);
   });
   trunks.instanceMatrix.needsUpdate = true;
   cones.instanceMatrix.needsUpdate = true;
   cones2.instanceMatrix.needsUpdate = true;
+  cones3.instanceMatrix.needsUpdate = true;
   if (cones.instanceColor) cones.instanceColor.needsUpdate = true;
   if (cones2.instanceColor) cones2.instanceColor.needsUpdate = true;
+  if (cones3.instanceColor) cones3.instanceColor.needsUpdate = true;
   scene.add(trunks);
   scene.add(cones);
   scene.add(cones2);
+  scene.add(cones3);
 }
 
 /** Near-camera ground detail: bushes, rocks and flower dots on the two low islands,
@@ -603,8 +716,12 @@ function buildTrees(scene, rng) {
 function buildDetail(scene, rng) {
   const zones = [
     // [x0, x1, z0, z1, bushes, rocks, flowers]
-    [-500, 500, 150, 950, 140, 45, 160], // home south foreground (landing frame)
-    [850, 1750, -650, -200, 110, 40, 120], // Karang south-west foreground (hop frame)
+    // Stage G: the two foreground zones are denser still (the landing and hop
+    // frames look straight across them, and the lower half of shots 2 and 4 was
+    // still reading as a smooth carpet) — and a new grass-tuft layer (below)
+    // puts something ankle-high on the ground itself.
+    [-500, 500, 150, 950, 200, 70, 230], // home south foreground (landing frame)
+    [850, 1750, -650, -200, 160, 60, 180], // Karang south-west foreground (hop frame)
     [-900, 900, -900, 900, 60, 20, 60], // home island general
     [900, 2100, -1500, -300, 50, 15, 50], // Karang general
   ];
@@ -678,13 +795,79 @@ function buildDetail(scene, rng) {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     scene.add(mesh);
   }
+  // Stage G: GRASS TUFTS — ankle-high cones scattered thick in the two
+  // foreground zones only, where the camera flies low. The terrain mesh is one
+  // vertex per ~61 m, so without something standing on it the near ground is a
+  // smooth wash no matter how strong the speckle is; 700 tufts give the lower
+  // half of the landing and hop frames something to catch the light. Same
+  // yellow-green family as the grass (hue 0.28–0.32, sat 0.42) — never a new
+  // green of their own. They cast real shadows too, so the foreground has
+  // texture from the light as well as from the geometry.
+  const tufts = [];
+  for (const [x0, x1, z0, z1, count] of [[-500, 500, 150, 950, 380], [850, 1750, -650, -200, 320]]) {
+    let guard = 0;
+    let placed = 0;
+    while (placed < count && guard < 4000) {
+      guard += 1;
+      const x = rng.range(x0, x1);
+      const z = rng.range(z0, z1);
+      const h = groundAt(x, z);
+      if (h < 3 || h > 42) continue;
+      if (onRunwayPlateau(x, z)) continue;
+      if (distToRiver(x, z) < 18) continue;
+      tufts.push([x, h, z, rng.range(0.7, 1.5)]);
+      placed += 1;
+    }
+  }
+  const tuftGeo = new THREE.ConeGeometry(0.45, 0.9, 5);
+  const tuftMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const tuftMesh = new THREE.InstancedMesh(tuftGeo, tuftMat, tufts.length);
+  tuftMesh.castShadow = true;
+  tufts.forEach(([x, h, z, scale], i) => {
+    s.set(scale * rng.range(0.8, 1.3), scale, scale * rng.range(0.8, 1.3));
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rng.next() * Math.PI * 2);
+    p.set(x, h + 0.35 * scale, z);
+    m.compose(p, q, s);
+    tuftMesh.setMatrixAt(i, m);
+    col.setHSL(0.28 + rng.next() * 0.04, 0.42, 0.30 + rng.next() * 0.15);
+    tuftMesh.setColorAt(i, col);
+  });
+  tuftMesh.instanceMatrix.needsUpdate = true;
+  if (tuftMesh.instanceColor) tuftMesh.instanceColor.needsUpdate = true;
+  scene.add(tuftMesh);
+  // Bushes and rocks cast real shadows now as well.
+  bushMesh.castShadow = true;
+  rockMesh.castShadow = true;
 }
 
 function buildVolcanoDetails(scene) {
   const v = ISLANDS[2];
+  // Stage G: the crater floor was one flat dark disc — now it is a canvas of
+  // rocky speckle with a bright rim ring, so the summit reads as broken rock
+  // from the cover frame instead of a painted circle.
+  const craterCanvas = document.createElement('canvas');
+  craterCanvas.width = 128;
+  craterCanvas.height = 128;
+  const cctx = craterCanvas.getContext('2d');
+  cctx.fillStyle = '#3a3230';
+  cctx.fillRect(0, 0, 128, 128);
+  const craterRng = createRandom(SEED + 51);
+  for (let i = 0; i < 500; i += 1) {
+    const g = Math.floor(craterRng.range(40, 110));
+    cctx.fillStyle = `rgb(${g},${Math.floor(g * 0.92)},${Math.floor(g * 0.85)})`;
+    const r = craterRng.range(1, 4);
+    cctx.beginPath();
+    cctx.arc(craterRng.next() * 128, craterRng.next() * 128, r, 0, Math.PI * 2);
+    cctx.fill();
+  }
+  cctx.strokeStyle = 'rgba(232, 226, 212, 0.85)';
+  cctx.lineWidth = 5;
+  cctx.beginPath();
+  cctx.arc(64, 64, 60, 0, Math.PI * 2);
+  cctx.stroke();
   const crater = new THREE.Mesh(
     new THREE.CircleGeometry(120, 24),
-    new THREE.MeshLambertMaterial({ color: 0x3a3230 }),
+    new THREE.MeshLambertMaterial({ map: new THREE.CanvasTexture(craterCanvas) }),
   );
   crater.rotation.x = -Math.PI / 2;
   crater.position.set(v.x, 556, v.z); // the crater floor, not the rim
@@ -717,6 +900,7 @@ function buildLighthouse(scene) {
     new THREE.MeshLambertMaterial({ color: 0x6a625a }),
   );
   plinth.position.y = 4;
+  plinth.castShadow = true;
   house.add(plinth);
   // Shore rocks around the plinth, breaking the waterline.
   const rockGeo = new THREE.DodecahedronGeometry(2.2, 0);
@@ -733,6 +917,10 @@ function buildLighthouse(scene) {
     new THREE.MeshLambertMaterial({ color: 0xf4ede0 }),
   );
   tower.position.y = 8 + 16;
+  // Stage G: the tower throws a real shadow on the shore now — a white tower
+  // with a sharp dark twin on the sand is what makes it read as solid at noon.
+  tower.castShadow = true;
+  tower.receiveShadow = true;
   house.add(tower);
   for (const [by, br] of [[8 + 11, 3.4], [8 + 23, 3.0]]) {
     const band = new THREE.Mesh(
@@ -759,6 +947,7 @@ function buildLighthouse(scene) {
     new THREE.MeshLambertMaterial({ color: 0xf4ede0 }),
   );
   cottage.position.set(11, 8 + 2.25, 5);
+  cottage.castShadow = true;
   house.add(cottage);
   const cottageRoof = new THREE.Mesh(
     new THREE.ConeGeometry(6, 3.4, 4),
@@ -814,11 +1003,15 @@ function buildLighthouse(scene) {
  *  over the mountain in both frames, hiding the hero and the lighthouse it was
  *  meant to show. */
 function blocksHero(cx, cy, cz) {
-  // Cover cone: from (790, 140, -200), axis east. The volcano's angular box from
+  // Cover cone: from the far camera behind the staged cover plane — the plane
+  // starts at (1000, 145, -260) heading east, the far camera sits 36 m behind
+  // it at ~(964, 152, -260) — axis east. The volcano's angular box from
   // there is roughly ha -15°..+22°, va -3°..+9°; the margins allow for cloud size.
-  const dx = cx - 790;
-  const dy = cy - 140;
-  const dz = cz + 200;
+  // (Stage G moved the cover staging 400 m east so the coastal lighthouse reads
+  // bigger; the cone origin moved with it.)
+  const dx = cx - 964;
+  const dy = cy - 152;
+  const dz = cz + 260;
   if (dx > 300 && dx < 3600) {
     const ha = Math.atan2(dz, dx);
     const va = Math.atan2(dy, dx);
@@ -827,13 +1020,13 @@ function blocksHero(cx, cy, cz) {
   // Cover lighthouse cone: from the same camera toward the lighthouse lamp
   // (1500, 41, -250) — a cloud within ~4.4° of that sightline, 300–1500 m out,
   // would sit on the tower in the frame.
-  const ldx = cx - 790;
-  const ldy = cy - 140;
-  const ldz = cz + 200;
+  const ldx = cx - 964;
+  const ldy = cy - 152;
+  const ldz = cz + 260;
   const lvLen = Math.sqrt(ldx * ldx + ldy * ldy + ldz * ldz);
-  const laLen = Math.sqrt(710 * 710 + 99 * 99 + 50 * 50);
+  const laLen = Math.sqrt(536 * 536 + 111 * 111 + 10 * 10);
   if (lvLen > 300 && lvLen < 1500) {
-    const cos = (ldx * 710 + ldy * -99 + ldz * -50) / (lvLen * laLen);
+    const cos = (ldx * 536 + ldy * -111 + ldz * 10) / (lvLen * laLen);
     if (cos > 0.997) return true;
   }
   // Rings-shot cone: from (428, 118, -343) toward the lighthouse lamp (1500, 41, -250).
@@ -1025,7 +1218,7 @@ function buildStormWall(scene, rng) {
 /** Build the whole static world into the scene. */
 export function buildWorld(scene) {
   const rng = createRandom(SEED + 5);
-  buildSky(scene);
+  const sun = buildSky(scene);
   buildTerrainMesh(scene);
   buildSea(scene, rng);
   buildRiver(scene);
@@ -1036,5 +1229,5 @@ export function buildWorld(scene) {
   buildLighthouse(scene);
   buildClouds(scene, rng);
   const stormWall = buildStormWall(scene, rng);
-  return { stormWall };
+  return { stormWall, sun };
 }
