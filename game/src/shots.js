@@ -155,16 +155,20 @@ export function stageShot(sim, name) {
     return flown;
   }
   if (name === 'landing') {
-    // Home landing, stopped on short final: the plane is ~420 m out and low, flying
-    // 60 m east of the centreline so the "36" at the near threshold reads beside
-    // the plane (not hidden behind it) and the river crosses the frame on the right.
-    sim.reset({ x: 60, y: 80, z: 900, heading: 0, speed: 26, throttle: 42 }, 'rings');
+    // Home landing, stopped on short final: the plane is ~320 m out and low, flying
+    // 60 m WEST of the centreline so the "36" at the near threshold reads big beside
+    // the plane (not hidden behind it) and the river — now on the far side of the
+    // strip — crosses the frame as a winding band instead of a blob at the camera.
+    // Stage C: closer than Stage B (420 m), bigger numbers (34 m), and the rings are
+    // hidden for this shot — one drifted into the frame behind the mission card.
+    sim.reset({ x: -60, y: 80, z: 900, heading: 0, speed: 26, throttle: 42 }, 'rings');
+    sim.rings.setVisible(false);
     let flown = 0;
     for (let t = 0; t < 45; t += STEP) {
       const f = sim.flight;
-      sim.step(STEP, landingInput(f, 60, 0));
+      sim.step(STEP, landingInput(f, -60, 0));
       flown += STEP;
-      if ((near2(f, 60, 0, 420) && f.y < 42) || f.landed || f.crashed) break;
+      if ((near2(f, -60, 0, 320) && f.y < 32) || f.landed || f.crashed) break;
     }
     return flown;
   }

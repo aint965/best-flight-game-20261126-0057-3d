@@ -10,9 +10,15 @@ import { SEED } from './world.js';
 const SUN_DIR = new THREE.Vector3(-0.9, 0.22, -0.28).normalize();
 const TERRAIN_CENTER = { x: 1350, z: -450 };
 
-/** The home island's river, from its spring pond down to the south-west shore. */
+/** The home island's river, from its spring pond down to the north-west shore.
+ *  Stage C, second pass: it used to flow south-west, which put it outside the
+ *  landing frame (the camera looks north) — now it meanders north-west across the
+ *  island, passing just west of the strip, so the landing frame shows it as a
+ *  winding band crossing the whole shot. It never crosses the asphalt: the closest
+ *  point (30, 150) stays 15 m east of the strip edge. */
 const RIVER_POINTS = [
-  [140, 280], [80, 400], [-40, 500], [-180, 590], [-330, 660], [-470, 730], [-560, 800],
+  [140, 280], [90, 220], [30, 150], [-50, 90], [-110, 20], [-180, -60],
+  [-280, -180], [-420, -330], [-560, -480], [-700, -620], [-820, -760],
 ];
 
 function clamp(v, lo, hi) {
@@ -197,16 +203,19 @@ function buildTerrainMesh(scene) {
       + Math.abs(groundAt(wx, wz + 25) - groundAt(wx, wz - 25)) / 50;
     const n = fbm2(wx, wz, SEED + 3);
     // Grass: three stops across the rolling noise plus dark patches and fine grain,
-    // so the ground reads mottled instead of one flat olive field.
+    // so the ground reads mottled instead of one flat olive field. Stage C deepens
+    // the mottling (the landing foreground was still flat olive) with a finer speckle
+    // octave and darker, more frequent patches.
     const fine = valueNoise(wx, wz, 55, SEED + 13);
+    const speckle = valueNoise(wx, wz, 12, SEED + 23);
     if (h < 0.3) c.copy(cSeabed);
     else if (h < 3.2) c.copy(cSand).lerp(cGrassA, smoothstep(1.2, 3.2, h));
     else {
-      const t = clamp(0.5 + 0.5 * n + fine * 0.18, 0, 1);
+      const t = clamp(0.5 + 0.5 * n + fine * 0.45 + speckle * 0.12, 0, 1);
       if (t < 0.5) c.copy(cGrassA).lerp(cGrassDark, t * 1.1);
       else c.copy(cGrassA).lerp(cGrassB, (t - 0.5) * 2);
-      if (fbm2(wx, wz, SEED + 17) > 0.42) c.multiplyScalar(0.82);
-      c.offsetHSL(0, 0, fine * 0.045);
+      if (fbm2(wx, wz, SEED + 17) > 0.3) c.multiplyScalar(0.65);
+      c.offsetHSL(0, 0, fine * 0.12 + speckle * 0.03);
     }
     if (slope > 0.45) c.lerp(cRock, smoothstep(0.45, 0.9, slope));
     const dvx = wx - volcano.x;
@@ -214,20 +223,21 @@ function buildTerrainMesh(scene) {
     if (dvx * dvx + dvz * dvz < volcano.radius * volcano.radius) {
       // The volcano is rock, not a smooth brown cone: wide height bands the mesh can
       // actually resolve, dark radial gullies running down the slope, and a pale ash
-      // cap with a bright rim ring around the crater.
+      // cap with a bright rim ring around the crater. Stage C pushes the band and
+      // gully contrast harder (the Stage B strata read, but softly).
       const ang = Math.atan2(dvz, dvx);
-      const streak = 0.5 + 0.5 * valueNoise(ang * 8, h * 0.1, 1, SEED + 31);
+      const streak = 0.5 + 0.5 * valueNoise(ang * 14, h * 0.08, 1, SEED + 31);
       if (h > 420) {
-        c.copy(cAsh).lerp(cRock, 0.2 + 0.2 * n);
+        c.copy(cAsh).lerp(cRock, 0.12 + 0.15 * n);
         if (h > 535 && h < 565) c.lerp(cRim, 0.45);
       } else if (h > 120) {
-        const band = 0.5 + 0.5 * Math.sin(h * 0.05 + n * 2.0);
-        c2.copy(cRockDark).lerp(cAsh, band * 0.5);
-        c.lerp(c2, 0.85);
-        c.multiplyScalar(0.82 + 0.36 * streak);
+        const band = 0.5 + 0.5 * Math.sin(h * 0.065 + n * 2.2);
+        c2.copy(cRockDark).lerp(cAsh, band * 0.8);
+        c.lerp(c2, 0.9);
+        c.multiplyScalar(0.7 + 0.6 * streak);
       } else {
         c.lerp(cRock, 0.4);
-        c.multiplyScalar(0.85 + 0.3 * streak);
+        c.multiplyScalar(0.75 + 0.5 * streak);
       }
     }
     colors[i * 3] = c.r;
@@ -252,6 +262,9 @@ function buildSea(scene, rng) {
 
   // Sun glitter: a band of bright quads on the water toward the setting sun, big
   // enough to read at a kilometre (the Stage A quads were sub-pixel and invisible).
+  // Stage C adds a dense glitter BAND along the sun's line (z ≈ -150, running east
+  // from the sunset toward the volcano), so the cover frame — which looks east,
+  // away from the sun — still shows a glitter path on the sea leading to the hero.
   const glitterMat = new THREE.MeshBasicMaterial({
     color: 0xffe9b0, transparent: true, opacity: 0.7,
     blending: THREE.AdditiveBlending, depthWrite: false,
@@ -263,19 +276,30 @@ function buildSea(scene, rng) {
     m.setPosition(rng.range(-5200, 2200), 0.3, rng.range(-2600, 2200));
     quads.push({ geometry: g, matrix: m });
   }
+  for (let i = 0; i < 200; i += 1) {
+    // Stage C, second pass: 10-20 m long and 2-4 m wide — the first pass used
+    // 18-44 m quads and they read as white planks scattered on the water.
+    const g = new THREE.PlaneGeometry(rng.range(10, 20), rng.range(2, 4));
+    const m = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+    m.setPosition(rng.range(-500, 3800), 0.32, -150 + rng.range(-200, 200));
+    quads.push({ geometry: g, matrix: m });
+  }
   const glitter = new THREE.Mesh(mergeParts(quads), glitterMat);
   scene.add(glitter);
 
   // The sun path: one long soft streak of warm light on the water, brightest toward
   // the western horizon and fading as it runs east — it reads from any camera angle,
-  // where a view-dependent specular highlight would not.
+  // where a view-dependent specular highlight would not. Stage C stretches it east
+  // past the volcano (its tail now crosses the cover frame's sea) with a longer fade.
+  // Second pass: the tail was too faint to read — the mid gradient is brighter now.
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 128;
   const ctx = canvas.getContext('2d');
   const grad = ctx.createLinearGradient(0, 0, 512, 0);
-  grad.addColorStop(0, 'rgba(255, 220, 150, 0.85)');
-  grad.addColorStop(0.55, 'rgba(255, 200, 120, 0.4)');
+  grad.addColorStop(0, 'rgba(255, 220, 150, 0.9)');
+  grad.addColorStop(0.45, 'rgba(255, 200, 120, 0.65)');
+  grad.addColorStop(0.75, 'rgba(255, 200, 120, 0.3)');
   grad.addColorStop(1, 'rgba(255, 200, 120, 0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 512, 128);
@@ -288,21 +312,20 @@ function buildSea(scene, rng) {
   ctx.fillStyle = gradY;
   ctx.fillRect(0, 0, 512, 128);
   const path = new THREE.Mesh(
-    new THREE.PlaneGeometry(5200, 1300),
+    new THREE.PlaneGeometry(9100, 1400),
     new THREE.MeshBasicMaterial({
-      map: new THREE.CanvasTexture(canvas), transparent: true, opacity: 0.55,
+      map: new THREE.CanvasTexture(canvas), transparent: true, opacity: 0.7,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }),
   );
   path.rotation.x = -Math.PI / 2;
   // The canvas gradient is bright at its left edge, which maps to the plane's -x end:
   // the bright end sits at the western horizon and fades east.
-  path.position.set(-2600, 0.35, -100);
+  path.position.set(-650, 0.35, -150);
   scene.add(path);
 }
 
-function buildRiver(scene) {
-  const width = 20;
+function riverRibbon(width, yLift, color, opacity) {
   const positions = [];
   const index = [];
   for (let i = 0; i < RIVER_POINTS.length; i += 1) {
@@ -314,7 +337,7 @@ function buildRiver(scene) {
     const len = Math.sqrt(dx * dx + dz * dz) || 1;
     dx /= len;
     dz /= len;
-    const y = groundAt(x, z) + 0.5;
+    const y = groundAt(x, z) + yLift;
     positions.push(x - dz * width / 2, y, z + dx * width / 2);
     positions.push(x + dz * width / 2, y, z - dx * width / 2);
     if (i > 0) {
@@ -326,14 +349,21 @@ function buildRiver(scene) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setIndex(index);
   geo.computeVertexNormals();
-  const river = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
-    color: 0x4aa8d8, side: THREE.DoubleSide, transparent: true, opacity: 0.95,
+  return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+    color, side: THREE.DoubleSide, transparent: true, opacity,
   }));
-  scene.add(river);
+}
+
+function buildRiver(scene) {
+  // Stage C: 14 m wide, not 20 — the Stage B river read as a wide blue lake in the
+  // landing frame. A thinner, lighter highlight ribbon rides on top so the water
+  // reads as a winding river, not a pond; the spring pond shrinks with it.
+  scene.add(riverRibbon(14, 0.5, 0x4aa8d8, 0.95));
+  scene.add(riverRibbon(5, 0.65, 0x8fd0f0, 0.85));
 
   // The spring pond the river starts from.
   const pond = new THREE.Mesh(
-    new THREE.CircleGeometry(26, 20),
+    new THREE.CircleGeometry(14, 20),
     new THREE.MeshLambertMaterial({ color: 0x4aa8d8 }),
   );
   pond.rotation.x = -Math.PI / 2;
@@ -401,7 +431,8 @@ function buildRunways(scene) {
     // so "36" sat at the far end, upside down from the approach.
     for (let i = 0; i < 2; i += 1) {
       const num = new THREE.Mesh(
-        new THREE.PlaneGeometry(26, 13),
+        // Stage C: 34 x 17 m, not 26 x 13 — "36" read but small at thumbnail size.
+        new THREE.PlaneGeometry(34, 17),
         new THREE.MeshBasicMaterial({ map: numberTexture(r.numbers[i]), transparent: true }),
       );
       num.rotation.x = -Math.PI / 2;
@@ -501,45 +532,63 @@ function buildVolcanoDetails(scene) {
   crater.position.set(v.x, 556, v.z); // the crater floor, not the rim
   scene.add(crater);
 
-  // The lighthouse on the volcano's north shoulder — tall enough and bright enough
-  // to read from the cover camera 3 km away: a 24 m tower, a red band, a warm lamp
-  // with a big glow sprite, and a white keeper's cottage beside it.
-  const lx = v.x;
-  const lz = v.z - 190;
+  // The lighthouse on the volcano's WEST shoulder, facing the cover camera and the
+  // incoming plane: a 60 m tower, white with two red bands, a red roof and a big warm
+  // lamp, on a white terrace with the keeper's cottage beside it. Stage B's 24 m tower
+  // on the north shoulder read as a single pink glow dot from 3 km — this one is tall
+  // enough, wide enough and bright enough to read as a tower, not a dot.
+  const lx = v.x - 550;
+  const lz = v.z - 100;
   const gy = groundAt(lx, lz);
   const house = new THREE.Group();
   house.position.set(lx, gy, lz);
-  const tower = new THREE.Mesh(
-    new THREE.CylinderGeometry(3.4, 4.2, 24, 10),
+  const skirt = new THREE.Mesh(
+    new THREE.CylinderGeometry(18, 19, 6, 10),
     new THREE.MeshLambertMaterial({ color: 0xf4ede0 }),
   );
-  tower.position.y = 12;
-  house.add(tower);
-  const band = new THREE.Mesh(
-    new THREE.CylinderGeometry(3.7, 3.7, 3.6, 10),
-    new THREE.MeshLambertMaterial({ color: 0xc23b2a }),
+  skirt.position.y = 3;
+  house.add(skirt);
+  const tower = new THREE.Mesh(
+    // Second pass: 24 m wide at the base, not 14 — the 60 m tower was tall enough
+    // but only ~3 px wide from the cover camera, so it still read as a dot.
+    new THREE.CylinderGeometry(9, 12, 60, 10),
+    new THREE.MeshLambertMaterial({ color: 0xf4ede0 }),
   );
-  band.position.y = 15;
-  house.add(band);
+  tower.position.y = 30;
+  house.add(tower);
+  for (const by of [18, 42]) {
+    const band = new THREE.Mesh(
+      new THREE.CylinderGeometry(12.5, 12.5, 4, 10),
+      new THREE.MeshLambertMaterial({ color: 0xc23b2a }),
+    );
+    band.position.y = by;
+    house.add(band);
+  }
   const lamp = new THREE.Mesh(
-    new THREE.SphereGeometry(3.0, 10, 8),
+    new THREE.SphereGeometry(5, 10, 8),
     new THREE.MeshBasicMaterial({ color: 0xffe9a0 }),
   );
-  lamp.position.y = 25.5;
+  lamp.position.y = 62;
   house.add(lamp);
+  const roof = new THREE.Mesh(
+    new THREE.ConeGeometry(12, 6, 10),
+    new THREE.MeshLambertMaterial({ color: 0xc23b2a }),
+  );
+  roof.position.y = 68;
+  house.add(roof);
   const cottage = new THREE.Mesh(
     new THREE.BoxGeometry(9, 5, 7),
     new THREE.MeshLambertMaterial({ color: 0xf4ede0 }),
   );
-  cottage.position.set(9, 2.5, 4);
+  cottage.position.set(12, 2.5, 5);
   house.add(cottage);
-  const roof = new THREE.Mesh(
+  const cottageRoof = new THREE.Mesh(
     new THREE.ConeGeometry(6.5, 3.5, 4),
     new THREE.MeshLambertMaterial({ color: 0xc23b2a }),
   );
-  roof.position.set(9, 6.7, 4);
-  roof.rotation.y = Math.PI / 4;
-  house.add(roof);
+  cottageRoof.position.set(12, 6.7, 5);
+  cottageRoof.rotation.y = Math.PI / 4;
+  house.add(cottageRoof);
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
@@ -552,49 +601,63 @@ function buildVolcanoDetails(scene) {
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
     map: new THREE.CanvasTexture(canvas), blending: THREE.AdditiveBlending, depthWrite: false,
   }));
-  glow.position.y = 25.5;
-  glow.scale.set(70, 70, 1);
+  glow.position.y = 62;
+  glow.scale.set(130, 130, 1);
   house.add(glow);
   scene.add(house);
 }
 
 function buildClouds(scene, rng) {
-  // Cumulus, not flat discs: each cluster is a stack of near-spherical puffs with a
-  // taller tower puff on top, and the puffs are shaded by height — pale grey at the
+  // Cumulus, not flat discs: each cluster is a stack of near-spherical puffs with
+  // taller tower puffs on top, and the puffs are shaded by height — pale grey at the
   // base, white at the crown — so a cloud reads as a volume from below and the side.
-  // Stage A's puffs were squashed 4:1 and one flat colour, which is why they read
-  // as grey ellipses pasted on the sky.
+  // Stage C: more puffs per cluster, taller towers, and an emissive lift so a cloud
+  // never goes black on its shadow side (Stage B's shot 4 showed clouds as dark
+  // blobs). Five hero clouds sit at fixed spots — three in the north-east sky the
+  // Island Hop frame looks at (it was empty), two over the western sea.
   const cBase = new THREE.Color(0xc9cedb);
   const cMid = new THREE.Color(0xe8ebf2);
   const cTop = new THREE.Color(0xffffff);
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.92 });
+  const mat = new THREE.MeshLambertMaterial({
+    vertexColors: true, transparent: true, opacity: 0.92,
+    emissive: 0x707684, emissiveIntensity: 0.45,
+  });
+  function cluster(cx, cy, cz, puffs) {
+    const parts = [];
+    const towers = rng.next() < 0.5 ? 2 : 1;
+    for (let i = 0; i < puffs; i += 1) {
+      const tower = i < towers;
+      const g = new THREE.SphereGeometry(1, 10, 8);
+      const m = new THREE.Matrix4();
+      const sx = tower ? rng.range(40, 62) : rng.range(55, 115);
+      const sy = tower ? rng.range(36, 55) : rng.range(22, 42);
+      const sz = tower ? rng.range(35, 52) : rng.range(38, 68);
+      m.makeScale(sx, sy, sz);
+      const px = cx + rng.range(-80, 80);
+      const py = cy + (tower ? rng.range(14, 30) : rng.range(-12, 12));
+      const pz = cz + rng.range(-55, 55);
+      m.setPosition(px, py, pz);
+      const t = tower ? 1 : clamp((py - (cy - 14)) / 34, 0, 1);
+      const col = new THREE.Color().copy(cBase).lerp(cMid, t);
+      if (tower) col.copy(cTop);
+      parts.push({ geometry: g, matrix: m, color: col });
+    }
+    return new THREE.Mesh(mergePartsColor(parts), mat);
+  }
   const clusters = 16;
   for (let c = 0; c < clusters; c += 1) {
     const cx = rng.range(-3200, 5600);
     const cz = rng.range(-3200, 2600);
     const cy = c < 5 ? rng.range(140, 210) : rng.range(280, 540);
-    const puffs = 4 + Math.floor(rng.next() * 3);
-    const parts = [];
-    for (let i = 0; i < puffs; i += 1) {
-      const tower = i === 0;
-      const g = new THREE.SphereGeometry(1, 10, 8);
-      const m = new THREE.Matrix4();
-      const sx = tower ? rng.range(40, 60) : rng.range(50, 110);
-      const sy = tower ? rng.range(28, 42) : rng.range(16, 30);
-      const sz = tower ? rng.range(35, 50) : rng.range(35, 65);
-      m.makeScale(sx, sy, sz);
-      const px = cx + rng.range(-70, 70);
-      const py = cy + (tower ? rng.range(10, 22) : rng.range(-10, 10));
-      const pz = cz + rng.range(-50, 50);
-      m.setPosition(px, py, pz);
-      const t = tower ? 1 : clamp((py - (cy - 12)) / 30, 0, 1);
-      const col = new THREE.Color().copy(cBase).lerp(cMid, t);
-      if (tower) col.copy(cTop);
-      parts.push({ geometry: g, matrix: m, color: col });
-    }
-    const cloud = new THREE.Mesh(mergePartsColor(parts), mat);
-    scene.add(cloud);
+    const puffs = 6 + Math.floor(rng.next() * 4);
+    scene.add(cluster(cx, cy, cz, puffs));
   }
+  // Hero clouds at fixed spots, so the frames that need sky always have it.
+  const heroes = [
+    [2600, 320, -1200], [3400, 390, -800], [4200, 300, -1500],
+    [-1800, 300, -600], [-2400, 390, 800],
+  ];
+  for (const [hx, hy, hz] of heroes) scene.add(cluster(hx, hy, hz, 7));
 }
 
 /** The storm front: a ragged wall of dark cloud closing in from the east. The loop

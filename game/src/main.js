@@ -45,6 +45,15 @@ camera.position.set(600, 140, 900);
 const { stormWall } = buildWorld(scene);
 const plane = buildPlane(scene);
 const rings = buildRings(scene);
+
+// A warm fill light that rides with the camera, pointed at the plane: it lights
+// whatever the camera looks at, so the plane's camera-facing side never goes black
+// when the sun is behind it (Stage B's landing frame was a dark silhouette). Kept
+// modest (0.45) so the sunset mood is lifted, not flattened.
+const fillLight = new THREE.DirectionalLight(0xffe0b8, 0.45);
+fillLight.position.set(0, 200, 500);
+scene.add(fillLight);
+scene.add(fillLight.target);
 const hud = createHud(ISLANDS);
 const input = createInput();
 const audio = createAudio();
@@ -159,6 +168,9 @@ function updateCamera(dt) {
   camera.position.y += (ty - camera.position.y) * k;
   camera.position.z += (tz - camera.position.z) * k;
   camera.lookAt(flight.x + fx * 40, flight.y + 2, flight.z + fz * 40);
+  // The fill light rides the camera and points at the plane.
+  fillLight.position.copy(camera.position);
+  fillLight.target.position.set(flight.x, flight.y, flight.z);
   camSettled = true;
 }
 

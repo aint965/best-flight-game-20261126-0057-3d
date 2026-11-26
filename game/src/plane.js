@@ -6,7 +6,10 @@ import { PALETTE } from './config.js';
 import { groundAt } from './world.js';
 
 export function buildPlane(scene) {
-  const red = new THREE.MeshLambertMaterial({ color: PALETTE.planeRed });
+  // A whisper of emissive on the red so the plane never reads as a black silhouette
+  // when the sun is behind the camera's subject (Stage B's landing frame): the red
+  // stays red even on its shadow side.
+  const red = new THREE.MeshLambertMaterial({ color: PALETTE.planeRed, emissive: 0x2e0a06 });
   const white = new THREE.MeshLambertMaterial({ color: PALETTE.planeWhite });
   const dark = new THREE.MeshLambertMaterial({ color: 0x22242a });
   const glass = new THREE.MeshPhongMaterial({
