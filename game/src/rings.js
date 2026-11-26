@@ -39,6 +39,10 @@ export function buildRings(scene) {
         r.mat.emissive.set(0x332200);
       }
     },
+    /** Island Hop has no rings: hide the course so it never reads as the objective. */
+    setVisible(v) {
+      for (const r of rings) r.mesh.visible = v;
+    },
     /**
      * Check the plane against every ring. Returns the indices passed this step.
      * A pass needs a plane crossing (sign change along the ring's normal) with the

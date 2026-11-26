@@ -7,8 +7,8 @@
 // of running the loop, paints it twice and sets window.__shotReady for a screenshot.
 // ?mission=rings starts straight into the Ring Run (the driver uses this).
 import * as THREE from '../vendor/three.module.min.js';
-import { BEST_KEY, MAX_FRAME, MISSIONS, STEP } from './config.js';
-import { ISLANDS, groundAt, homeSpawn } from './world.js';
+import { BEST_KEY, MAX_FRAME, STEP } from './config.js';
+import { ISLANDS, groundAt, homeSpawn, onStrip } from './world.js';
 import { buildWorld } from './terrain.js';
 import { buildPlane } from './plane.js';
 import { buildRings } from './rings.js';
@@ -17,6 +17,7 @@ import { createHud } from './hud.js';
 import { ACTION_CONFIRM, ACTION_PAUSE, ACTION_RESTART, createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { autopilotInput, stageShot } from './shots.js';
+import { applyMissionWind, createMission, missionStep } from './missions.js';
 
 const params = new URLSearchParams(window.location.search);
 const shot = params.get('shot');
@@ -41,7 +42,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.5, 20000);
 camera.position.set(600, 140, 900);
 
-buildWorld(scene);
+const { stormWall } = buildWorld(scene);
 const plane = buildPlane(scene);
 const rings = buildRings(scene);
 const hud = createHud(ISLANDS);
@@ -51,22 +52,11 @@ const audio = createAudio();
 let screen = 'title';
 let best = readBest();
 let flight = createFlight(homeSpawn());
-let mission = missionState('rings');
+let mission = createMission('rings');
 let camMode = 'chase';
 let camSettled = false;
 let soundOn = true;
 let autopilotOn = false;
-
-function missionState(id) {
-  const def = MISSIONS.find((m) => m.id === id) || MISSIONS[0];
-  return {
-    id: def.id,
-    name: def.name,
-    objective: def.id === 'rings' ? 'Rings 0/8 — next ring 1' : def.blurb,
-    timeLeft: 300,
-    done: false,
-  };
-}
 
 function readBest() {
   try {
@@ -91,7 +81,10 @@ function announce(message) {
 function reset(missionId = 'rings', spawn = homeSpawn()) {
   flight = createFlight(spawn);
   rings.reset();
-  mission = missionState(missionId);
+  rings.setVisible(missionId !== 'hop');
+  stormWall.visible = missionId === 'storm';
+  stormWall.position.x = 4600;
+  mission = createMission(missionId);
   camSettled = false;
   hud.hideBanner();
 }
@@ -104,35 +97,39 @@ const sim = {
   get rings() {
     return rings;
   },
-  reset(spawn) {
-    reset('rings', spawn);
+  get mission() {
+    return mission;
+  },
+  reset(spawn, missionId = 'rings') {
+    reset(missionId, spawn);
   },
   step(dt, inp) {
     const events = stepFlight(flight, inp, dt);
+    applyMissionWind(mission, flight, dt);
     const passed = rings.check(flight);
-    if (passed.length > 0) {
-      flight.score += passed.length * 250;
-      mission.objective = `Rings ${rings.passedCount()}/8 — next ring ${rings.nextIndex() + 1}`;
-    }
-    if (events & EVENT_LANDED) hud.toast('Landed — +750 pts');
+    if (passed.length > 0) flight.score += passed.length * 250;
+    const landedStrip = (events & EVENT_LANDED) ? onStrip(flight.x, flight.z) : null;
+    const out = missionStep(mission, {
+      passed,
+      landedStrip: landedStrip ? landedStrip.name : null,
+      nextRing: rings.nextIndex(),
+      ringsPassed: rings.passedCount(),
+    }, dt);
+    for (const t of out.toasts) hud.toast(t);
+    if (events & EVENT_LANDED && out.toasts.length === 0) hud.toast('Landed — +750 pts');
+    if (out.banner) hud.banner(out.banner);
     if (events & EVENT_CRASHED) screen = 'over';
-    if (rings.nextIndex() === -1 && !mission.done) {
-      mission.done = true;
-      mission.objective = 'Course complete — free flight!';
-      hud.banner('COURSE COMPLETE');
-    }
-    mission.timeLeft = Math.max(0, mission.timeLeft - dt);
     return events;
   },
 };
 
-function startGame() {
-  reset(missionParam === 'rings' ? 'rings' : 'rings');
+function startGame(missionId = mission.id) {
+  reset(missionId);
   screen = 'play';
   titleScreen.classList.add('hidden');
   endScreen.classList.add('hidden');
   audio.unlock();
-  announce('Flying. Ring Run: fly all 8 gold rings.');
+  announce(`Flying. ${mission.name}: ${mission.blurb}`);
 }
 
 function endGame(title, text) {
@@ -143,6 +140,8 @@ function endGame(title, text) {
   if (flight.score > best) {
     best = flight.score;
     saveBest(best);
+    const titleBest = document.getElementById('title-best');
+    if (titleBest) titleBest.textContent = String(best);
   }
   announce(`${title}. Score ${flight.score}. Best ${best}.`);
 }
@@ -220,7 +219,9 @@ function wireButtons() {
   document.getElementById('btn-restart').addEventListener('click', () => {
     if (screen !== 'title') startGame();
   });
-  document.getElementById('title-start').addEventListener('click', () => startGame());
+  document.getElementById('title-start').addEventListener('click', () => startGame('rings'));
+  document.getElementById('title-hop').addEventListener('click', () => startGame('hop'));
+  document.getElementById('title-storm').addEventListener('click', () => startGame('storm'));
   document.getElementById('pause-resume').addEventListener('click', () => {
     screen = 'play';
     pauseScreen.classList.add('hidden');
@@ -241,9 +242,17 @@ function runShot(name) {
   // overlays, or the screenshot shows a menu over the 3D scene.
   titleScreen.classList.add('hidden');
   endScreen.classList.add('hidden');
+  // The cover looks at the volcano from ~3 km out: pull the camera back so the
+  // whole mountain fits instead of filling the frame as a brown wall.
+  camMode = name === 'cover' ? 'far' : 'chase';
   updateCamera(1);
   plane.update(flight);
   rings.update(0);
+  // The rings shot stops just before the second ring, after banking the first:
+  // show the toast for the ring just passed, or the frame has no score story.
+  if (name === 'rings' && rings.passedCount() > 0) {
+    hud.toast(`Ring ${rings.passedCount()} — +250 pts`);
+  }
   let painted = 0;
   function paint() {
     hud.update(flight, mission, mission.timeLeft);
@@ -257,6 +266,11 @@ function runShot(name) {
 
 function runGame() {
   wireButtons();
+  // ?mission=hop|storm opens straight into that mission's world (rings hidden for
+  // the hop, the storm wall shown for the courier); anything else is Ring Run.
+  if (missionParam && ['rings', 'hop', 'storm'].includes(missionParam)) reset(missionParam);
+  const titleBest = document.getElementById('title-best');
+  if (titleBest) titleBest.textContent = String(best);
   let accumulator = 0;
   let last = performance.now();
   let elapsed = 0;
@@ -289,7 +303,15 @@ function runGame() {
       // The clock runs inside sim.step (one fixed step at a time), not here: counting it
       // in both places would run the mission timer twice as fast.
       if (mission.timeLeft <= 0 && !mission.done) {
-        endGame('TIME UP', `The clock ran out. Score ${flight.score}.`);
+        if (mission.id === 'storm') {
+          endGame('THE FRONT CLOSED', `The storm shut the strait. Score ${flight.score}.`);
+        } else {
+          endGame('TIME UP', `The clock ran out. Score ${flight.score}.`);
+        }
+      }
+      // The storm front slides west as its clock runs down.
+      if (mission.id === 'storm' && !mission.done) {
+        stormWall.position.x = 4600 - mission.elapsed * 6;
       }
       elapsed += 1 / 60;
       rings.update(elapsed);

@@ -94,6 +94,10 @@ export function createHud(islands) {
     banner: el('hud-banner'),
     attitude: el('hud-attitude'),
     map: el('hud-map'),
+    storm: el('hud-storm'),
+    stormDist: el('hud-storm-dist'),
+    stormEta: el('hud-storm-eta'),
+    stormBar: el('hud-storm-bar'),
   };
   const compassCtx = refs.compass.getContext('2d');
   const last = {};
@@ -184,6 +188,20 @@ export function createHud(islands) {
       refs.thrBar.style.width = `${flight.throttle}%`;
       setText(refs.mission, 'mission', mission.name.toUpperCase());
       setText(refs.objective, 'objective', mission.objective);
+      // The storm front panel only exists in the Storm Courier: distance, ETA and
+      // the closing bar, all from the mission state machine.
+      if (mission.id === 'storm') {
+        if (last.stormShown !== true) {
+          last.stormShown = true;
+          refs.storm.style.display = '';
+        }
+        setText(refs.stormDist, 'stormDist', `${mission.frontKm.toFixed(1)} km`);
+        setText(refs.stormEta, 'stormEta', `ETA ${fmtTime(timeLeft)}`);
+        refs.stormBar.style.width = `${Math.max(0, Math.min(100, (timeLeft / mission.timeLimit) * 100))}%`;
+      } else if (last.stormShown !== false) {
+        last.stormShown = false;
+        refs.storm.style.display = 'none';
+      }
       drawCompass(hdg);
       drawAttitude(refs.attitude, flight);
       drawMap(refs.map, flight, islands);

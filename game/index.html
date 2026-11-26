@@ -79,6 +79,7 @@
   <div class="panel"><div class="label">Best</div><div class="value" id="hud-best">0</div></div>
   <div class="panel"><div class="label">Time</div><div class="value" id="hud-time">05:00</div></div>
   <div class="panel"><div class="label">Mission</div><div class="value" style="font-size:19px" id="hud-mission">RING RUN</div><div style="font-size:12px;color:#d5dae3;margin-top:2px" id="hud-objective">Rings 0/8 — next ring 1</div></div>
+  <div class="panel" id="hud-storm" style="display:none"><div class="label">Storm Front · <span id="hud-storm-dist">4.2 km</span></div><div style="font-size:19px;font-weight:700" id="hud-storm-eta">ETA 04:00</div><div class="bar"><div id="hud-storm-bar" style="width:100%"></div></div></div>
   <div class="panel"><div class="label">Fuel <span id="hud-fuel">100%</span></div><div class="bar"><div id="hud-fuel-bar" style="width:100%"></div></div></div>
   <div class="panel"><div class="label">Damage <span id="hud-damage">0%</span></div><div class="bar damage"><div id="hud-damage-bar" style="width:0%"></div></div></div>
 </div>
@@ -107,11 +108,15 @@
   Thread the gold rings, hop between island strips, and outrun the storm front.</p>
   <div class="missions">
     <div><b>1 · Ring Run</b> — fly all 8 gold rings. <span style="color:#3fae5a">Ready to fly</span></div>
-    <div><b>2 · Island Hop</b> — land on Pulau Karang, then bring her home. <span class="soon">Stage B</span></div>
-    <div><b>3 · Storm Courier</b> — deliver the medicine before the front closes the strait. <span class="soon">Stage B</span></div>
+    <div><b>2 · Island Hop</b> — land on Pulau Karang, then bring her home. <span style="color:#3fae5a">Ready to fly</span></div>
+    <div><b>3 · Storm Courier</b> — deliver the medicine before the front closes the strait. <span style="color:#3fae5a">Ready to fly</span></div>
   </div>
-  <button id="title-start">✈ Fly Ring Run</button>
-  <div class="keys">W/S or ↑/↓ pitch · A/D or ←/→ bank · Q/E rudder · hold Shift for throttle · P pause · R restart</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+    <button id="title-start">✈ Fly Ring Run</button>
+    <button id="title-hop" style="background:#3fae5a;color:#0d1a0a">↗ Fly Island Hop</button>
+    <button id="title-storm" style="background:#e5534b;color:#fff">⛈ Fly Storm Courier</button>
+  </div>
+  <div class="keys">Best score: <span id="title-best">0</span> · W/S or ↑/↓ pitch · A/D or ←/→ bank · Q/E rudder · hold Shift for throttle · P pause · R restart</div>
 </div>
 
 <div id="pause-screen" class="overlay hidden">

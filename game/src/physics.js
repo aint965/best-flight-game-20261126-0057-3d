@@ -30,6 +30,9 @@ export function createFlight(spawn) {
     fuel: 100,
     score: 0,
     elapsed: 0,
+    /** Last counted touchdown { strip, at }: a landing counts again only on another
+     *  strip, or on the same strip after 15 s — a bounce is not a second landing. */
+    lastLanding: null,
   };
 }
 
@@ -101,10 +104,14 @@ export function stepFlight(flight, input, dt) {
         }
       } else {
         flight.onGround = true;
-        if (strip && Math.abs(vspeed) < 4 && flight.speed < 26 && !flight.landed) {
-          flight.landed = true;
-          flight.score += 750;
-          events |= EVENT_LANDED;
+        if (strip && Math.abs(vspeed) < 4 && flight.speed < 26) {
+          const last = flight.lastLanding;
+          if (!last || last.strip !== strip.name || flight.elapsed - last.at > 15) {
+            flight.lastLanding = { strip: strip.name, at: flight.elapsed };
+            flight.landed = true;
+            flight.score += 750;
+            events |= EVENT_LANDED;
+          }
         }
       }
       flight.vspeed = 0;

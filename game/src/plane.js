@@ -47,21 +47,38 @@ export function buildPlane(scene) {
   finTip.position.set(0, 1.65, 3.1);
   group.add(finTip);
 
-  // Propeller: a hub, two blades, and a translucent blur disc that reads as spinning.
+  // Propeller: a hub, two thin semi-transparent blades, and a blur disc with a
+  // radial-gradient texture — faint in the middle, a soft ring at the rim — so it
+  // reads as spinning air, not the grey circle with a black X Stage A showed.
   const prop = new THREE.Group();
   prop.position.set(0, 0, -4.7);
   const hub = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 8), dark);
   hub.rotation.x = -Math.PI / 2;
   prop.add(hub);
-  const bladeGeo = new THREE.BoxGeometry(0.28, 2.6, 0.1);
-  const blade1 = new THREE.Mesh(bladeGeo, dark);
+  const bladeMat = new THREE.MeshLambertMaterial({ color: 0x2a2c30, transparent: true, opacity: 0.55 });
+  const bladeGeo = new THREE.BoxGeometry(0.18, 2.4, 0.08);
+  const blade1 = new THREE.Mesh(bladeGeo, bladeMat);
   prop.add(blade1);
-  const blade2 = new THREE.Mesh(bladeGeo, dark);
+  const blade2 = new THREE.Mesh(bladeGeo, bladeMat);
   blade2.rotation.z = Math.PI / 2;
   prop.add(blade2);
+  const discCanvas = document.createElement('canvas');
+  discCanvas.width = 128;
+  discCanvas.height = 128;
+  const dctx = discCanvas.getContext('2d');
+  const dgrad = dctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+  dgrad.addColorStop(0, 'rgba(225, 225, 225, 0.04)');
+  dgrad.addColorStop(0.55, 'rgba(225, 225, 225, 0.10)');
+  dgrad.addColorStop(0.85, 'rgba(230, 230, 230, 0.22)');
+  dgrad.addColorStop(1, 'rgba(230, 230, 230, 0.05)');
+  dctx.fillStyle = dgrad;
+  dctx.fillRect(0, 0, 128, 128);
   const disc = new THREE.Mesh(
     new THREE.CircleGeometry(1.5, 24),
-    new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.22, side: THREE.DoubleSide }),
+    new THREE.MeshBasicMaterial({
+      map: new THREE.CanvasTexture(discCanvas), transparent: true, opacity: 0.6,
+      side: THREE.DoubleSide, depthWrite: false,
+    }),
   );
   prop.add(disc);
   group.add(prop);

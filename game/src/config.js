@@ -43,10 +43,10 @@ export const RING = {
   ],
 };
 
-export const MISSIONS = [
-  { id: 'rings', name: 'Ring Run', blurb: 'Fly all 8 gold rings before the clock runs out.' },
-  { id: 'hop', name: 'Island Hop', blurb: 'Land on Pulau Karang, then bring her home. (Stage B)' },
-  { id: 'storm', name: 'Storm Courier', blurb: 'Deliver the medicine before the front closes the strait. (Stage B)' },
+export const MISSION_DEFS = [
+  { id: 'rings', name: 'Ring Run', timeLimit: 300, blurb: 'Fly all 8 gold rings before the clock runs out.' },
+  { id: 'hop', name: 'Island Hop', timeLimit: 300, blurb: 'Land on Pulau Karang, then bring her home.' },
+  { id: 'storm', name: 'Storm Courier', timeLimit: 240, blurb: 'Deliver the medicine before the front closes the strait.' },
 ];
 
 export const PALETTE = {
@@ -55,16 +55,18 @@ export const PALETTE = {
   skyHorizon: '#ff9a3c',
   sun: '#ffd9a0',
   fog: '#f7a56a',
-  sea: '#1e6f8e',
-  seaDeep: '#14506e',
+  sea: '#2a7d9e',
+  seaDeep: '#1a5f7d',
   sand: '#e8d29a',
   grassA: '#5d8a4a',
   grassB: '#7aa85c',
+  grassDark: '#42682f',
   forest: '#2f6b3a',
   rock: '#8a6f5c',
+  rockDark: '#5e463a',
   ash: '#b9b3a8',
   seabed: '#3d5a4a',
-  asphalt: '#2a2d33',
+  asphalt: '#41464f',
   marking: '#f2f2e8',
   planeRed: '#d23c28',
   planeWhite: '#f4ede0',

@@ -1,6 +1,8 @@
 // Langit Nusantara: Island Hopper (3D) — the hand-in program (Node 22, standard library only).
 // The game is this directory's game/ folder: plain static files a desktop browser loads offline
 // (game/index.html and its ES modules, Three.js vendored under game/vendor/, no network request).
+// Three missions — Ring Run, Island Hop, Storm Courier — all proven completable in the
+// Node simulation (flight3d-sim-b.mjs) and captured in the 4-shot dossier below.
 // This program copies game/ and screenshots/ from beside this file to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 // The copy is byte for byte the same on every run: no timestamps, no randomness here.
@@ -58,4 +60,8 @@ let gameBytes = 0;
 console.log(`game/: ${gameFiles} file(s), ${gameBytes} byte(s) (caps: ${DOSSIER_CAPS.game_max_files} files, ${DOSSIER_CAPS.game_max_bytes} bytes)`);
 
 console.log(`handed in ${shotFiles.length} screenshot(s): ${shotFiles.join(', ') || 'none'}`);
+for (const name of shotFiles) {
+  const bytes = statSync(join(shotsDir, name)).size;
+  console.log(`screenshot ${name}: ${bytes} byte(s) (cap ${DOSSIER_CAPS.screenshots.max_bytes})`);
+}
 console.log(`dossier written to ${join(out, 'dossier.json')}`);
