@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Langit Nusantara: Island Hopper — 3D</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1c2f6e; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .panel { background: rgba(10, 14, 24, 0.72); border: 1px solid rgba(238, 241, 245, 0.14); border-radius: 10px; color: #eef1f5; padding: 8px 12px; }
+  .panel .label { font-size: 10px; letter-spacing: 0.12em; color: #9aa3b2; text-transform: uppercase; }
+  .panel .value { font-size: 26px; font-weight: 700; line-height: 1.05; }
+  .panel .value small { font-size: 13px; font-weight: 600; color: #9aa3b2; }
+  #hud-left { position: fixed; left: 14px; top: 14px; display: flex; flex-direction: column; gap: 8px; width: 132px; z-index: 5; }
+  #hud-right { position: fixed; right: 14px; top: 14px; display: flex; flex-direction: column; gap: 8px; width: 190px; z-index: 5; text-align: right; }
+  #hud-right .bar { height: 8px; border-radius: 4px; background: rgba(238,241,245,0.18); overflow: hidden; margin-top: 4px; }
+  #hud-right .bar > div { height: 100%; background: #3fae5a; }
+  #hud-right .bar.damage > div { background: #e5534b; }
+  #hud-compass-wrap { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 5; text-align: center; }
+  #hud-compass { display: block; border-radius: 8px; }
+  #hud-hdg-line { color: #eef1f5; font-weight: 700; margin-top: 2px; text-shadow: 0 1px 4px rgba(0,0,0,0.6); }
+  #hud-hdg-line span { color: #f2c94c; }
+  #hud-buttons { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+  #hud-buttons button { background: rgba(10, 14, 24, 0.72); color: #eef1f5; border: 1px solid rgba(238,241,245,0.25); border-radius: 8px; padding: 7px 10px; font-size: 13px; cursor: pointer; text-align: left; }
+  #hud-buttons button:hover { background: rgba(40, 50, 70, 0.85); }
+  #hud-toast { position: fixed; left: 50%; top: 96px; transform: translateX(-50%); background: rgba(10, 14, 24, 0.85); color: #f2c94c; border: 1px solid rgba(242, 201, 76, 0.5); border-radius: 999px; padding: 8px 18px; font-weight: 700; font-size: 15px; opacity: 0; transition: opacity 0.25s; z-index: 6; pointer-events: none; white-space: nowrap; }
+  #hud-toast.show { opacity: 1; }
+  #hud-banner { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%); color: #f2c94c; font-size: 44px; font-weight: 900; letter-spacing: 0.06em; text-shadow: 0 3px 18px rgba(0,0,0,0.7); opacity: 0; transition: opacity 0.4s; z-index: 6; pointer-events: none; }
+  #hud-banner.show { opacity: 1; }
+  #hud-bottom { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 5; width: 320px; text-align: center; }
+  #hud-thr-track { height: 16px; border-radius: 8px; background: rgba(10, 14, 24, 0.72); border: 1px solid rgba(238,241,245,0.25); overflow: hidden; }
+  #hud-thr-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #f2a541, #f2c94c); }
+  #throttle-slider { width: 100%; margin-top: 6px; accent-color: #f2c94c; }
+  #hud-attitude-wrap { position: fixed; left: 14px; bottom: 14px; z-index: 5; text-align: center; }
+  #hud-attitude { border-radius: 50%; border: 2px solid rgba(238,241,245,0.5); background: rgba(10,14,24,0.4); }
+  #hud-map-wrap { position: fixed; right: 14px; bottom: 14px; z-index: 5; text-align: center; }
+  #hud-map { border-radius: 10px; border: 1px solid rgba(238,241,245,0.25); }
+  .corner-label { font-size: 10px; letter-spacing: 0.12em; color: #eef1f5; text-transform: uppercase; text-shadow: 0 1px 4px rgba(0,0,0,0.8); margin-top: 4px; }
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(8, 10, 20, 0.55); color: #eef1f5; z-index: 10; text-align: center; padding: 20px; }
+  .overlay.hidden { display: none; }
+  .overlay h1 { font-size: 46px; margin: 0 0 8px; letter-spacing: 0.02em; text-shadow: 0 3px 18px rgba(0,0,0,0.8); }
+  .overlay h1 span { color: #f2c94c; }
+  .overlay p { font-size: 17px; max-width: 560px; line-height: 1.5; color: #d5dae3; }
+  .overlay .missions { text-align: left; background: rgba(10, 14, 24, 0.72); border: 1px solid rgba(238,241,245,0.18); border-radius: 12px; padding: 14px 20px; margin: 12px 0 18px; }
+  .overlay .missions div { margin: 6px 0; font-size: 15px; }
+  .overlay .missions b { color: #f2c94c; }
+  .overlay .missions .soon { color: #9aa3b2; }
+  .overlay button { background: #f2c94c; color: #231a05; border: none; border-radius: 999px; padding: 13px 34px; font-size: 18px; font-weight: 800; cursor: pointer; }
+  .overlay button:hover { background: #ffd75e; }
+  .overlay .keys { margin-top: 16px; font-size: 13px; color: #9aa3b2; }
+  .overlay h2 { font-size: 38px; margin: 0 0 8px; }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Langit Nusantara: Island Hopper — a 3D bush plane flying over an Indonesian archipelago at sunset"></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud-left">
+  <div class="panel"><div class="label">Alt</div><div class="value"><span id="hud-alt">0</span> <small>ft</small></div></div>
+  <div class="panel"><div class="label">Speed</div><div class="value"><span id="hud-speed">0</span> <small>kt</small></div></div>
+  <div class="panel"><div class="label">V/S</div><div class="value"><span id="hud-vs">+0</span> <small>fpm</small></div></div>
+  <div class="panel"><div class="label">Thr</div><div class="value"><span id="hud-thr">0%</span></div></div>
+  <div id="hud-buttons">
+    <button id="btn-pause">⏸ Pause</button>
+    <button id="btn-sound">🔊 Sound</button>
+    <button id="btn-camera">📷 Camera</button>
+    <button id="btn-restart">↻ Restart</button>
+  </div>
+</div>
+
+<div id="hud-compass-wrap">
+  <canvas id="hud-compass" width="360" height="30"></canvas>
+  <div id="hud-hdg-line">HDG <span id="hud-hdg">000</span>°</div>
+</div>
+
+<div id="hud-right">
+  <div class="panel"><div class="label">Score</div><div class="value" id="hud-score">0</div></div>
+  <div class="panel"><div class="label">Best</div><div class="value" id="hud-best">0</div></div>
+  <div class="panel"><div class="label">Time</div><div class="value" id="hud-time">05:00</div></div>
+  <div class="panel"><div class="label">Mission</div><div class="value" style="font-size:19px" id="hud-mission">RING RUN</div><div style="font-size:12px;color:#d5dae3;margin-top:2px" id="hud-objective">Rings 0/8 — next ring 1</div></div>
+  <div class="panel"><div class="label">Fuel <span id="hud-fuel">100%</span></div><div class="bar"><div id="hud-fuel-bar" style="width:100%"></div></div></div>
+  <div class="panel"><div class="label">Damage <span id="hud-damage">0%</span></div><div class="bar damage"><div id="hud-damage-bar" style="width:0%"></div></div></div>
+</div>
+
+<div id="hud-toast"></div>
+<div id="hud-banner"></div>
+
+<div id="hud-attitude-wrap">
+  <canvas id="hud-attitude" width="110" height="110"></canvas>
+  <div class="corner-label">Attitude</div>
+</div>
+
+<div id="hud-bottom">
+  <div id="hud-thr-track"><div id="hud-thr-bar"></div></div>
+  <input id="throttle-slider" type="range" min="0" max="100" value="0" aria-label="Throttle">
+</div>
+
+<div id="hud-map-wrap">
+  <canvas id="hud-map" width="170" height="124"></canvas>
+  <div class="corner-label">Archipelago Map</div>
+</div>
+
+<div id="title-screen" class="overlay">
+  <h1>LANGIT <span>NUSANTARA</span></h1>
+  <p>Island Hopper — fly the red bush plane across an Indonesian archipelago at sunset.
+  Thread the gold rings, hop between island strips, and outrun the storm front.</p>
+  <div class="missions">
+    <div><b>1 · Ring Run</b> — fly all 8 gold rings. <span style="color:#3fae5a">Ready to fly</span></div>
+    <div><b>2 · Island Hop</b> — land on Pulau Karang, then bring her home. <span class="soon">Stage B</span></div>
+    <div><b>3 · Storm Courier</b> — deliver the medicine before the front closes the strait. <span class="soon">Stage B</span></div>
+  </div>
+  <button id="title-start">✈ Fly Ring Run</button>
+  <div class="keys">W/S or ↑/↓ pitch · A/D or ←/→ bank · Q/E rudder · hold Shift for throttle · P pause · R restart</div>
+</div>
+
+<div id="pause-screen" class="overlay hidden">
+  <h2>Paused</h2>
+  <p>Press P or click below to keep flying.</p>
+  <button id="pause-resume">Resume</button>
+</div>
+
+<div id="end-screen" class="overlay hidden">
+  <h2 id="end-title">CRASHED</h2>
+  <p id="end-text"></p>
+  <button id="end-restart">↻ Fly again</button>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
