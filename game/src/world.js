@@ -21,6 +21,9 @@ export const ISLANDS = [
   { name: 'far-east', x: 5200, z: -2200, radius: 1000, peak: 180, basePeak: 180, hillX: 5200, hillZ: -2200 },
 ];
 
+/** The lighthouse on the volcano's west shoulder (terrain.js builds it here). */
+export const LIGHTHOUSE = { x: 3200, z: -120 };
+
 /** Runways: flat grass plateaus the strips sit on. heading is a compass heading in radians. */
 export const RUNWAYS = [
   { name: 'home', x: 0, z: 0, heading: 0, length: 650, width: 30, height: 2.4, numbers: ['36', '18'] },

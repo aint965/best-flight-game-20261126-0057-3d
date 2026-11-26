@@ -44,10 +44,29 @@ export const RING = {
 };
 
 export const MISSION_DEFS = [
-  { id: 'rings', name: 'Ring Run', timeLimit: 300, blurb: 'Fly all 8 gold rings before the clock runs out.' },
-  { id: 'hop', name: 'Island Hop', timeLimit: 300, blurb: 'Land on Pulau Karang, then bring her home.' },
-  { id: 'storm', name: 'Storm Courier', timeLimit: 240, blurb: 'Deliver the medicine before the front closes the strait.' },
+  {
+    id: 'rings', name: 'Ring Run', timeLimit: 300, blurb: 'Fly all 8 gold rings before the clock runs out.',
+    win: 'Fly through all 8 gold rings.',
+    lose: 'The 5:00 clock runs out, or the plane crashes.',
+    howto: 'Take off from the home strip, climb, and thread each gold hoop. Passed rings turn green; the next ring pulses gold.',
+  },
+  {
+    id: 'hop', name: 'Island Hop', timeLimit: 300, blurb: 'Land on Pulau Karang, then bring her home.',
+    win: 'Land on Pulau Karang 03/21, take off again, and land back home 36/18.',
+    lose: 'The 5:00 clock runs out, or the plane crashes. Landing on the wrong strip does not count.',
+    howto: 'Fly east to Pulau Karang and land on strip 03/21 (+750), then take off and bring her home to strip 36/18 (+750).',
+  },
+  {
+    id: 'storm', name: 'Storm Courier', timeLimit: 240, blurb: 'Deliver the medicine before the front closes the strait.',
+    win: 'Fly 6 courier rings, then land on Pulau Karang 03/21 before the front closes.',
+    lose: 'The 4:00 clock runs out, the front closes the strait, or the plane crashes.',
+    howto: 'Thread 6 courier rings, then land on Karang. An east wind (−2.5 m/s) pushes you back toward home the whole way — watch the STORM FRONT panel.',
+  },
 ];
+
+/** Scoring, shown on the briefing card and the results screen: a ring is +250,
+ *  a counted landing +750, and finishing early pays +5 per second left on the clock. */
+export const SCORE_RULES = { ring: 250, landing: 750, timeBonusPerSecond: 5 };
 
 export const PALETTE = {
   skyTop: '#1c2f6e',

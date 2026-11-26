@@ -38,6 +38,10 @@
   #hud-map { border-radius: 10px; border: 1px solid rgba(238,241,245,0.25); }
   .corner-label { font-size: 10px; letter-spacing: 0.12em; color: #eef1f5; text-transform: uppercase; text-shadow: 0 1px 4px rgba(0,0,0,0.8); margin-top: 4px; }
   .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(8, 10, 20, 0.55); color: #eef1f5; z-index: 10; text-align: center; padding: 20px; }
+  /* While a menu is open the top-centre compass and the bottom-centre throttle
+   * slider hide: the tall results screen otherwise centres its title over the
+   * compass and its hint over the slider. The side panels stay visible. */
+  body.menu-open #hud-compass-wrap, body.menu-open #hud-bottom { visibility: hidden; }
   .overlay.hidden { display: none; }
   .overlay h1 { font-size: 46px; margin: 0 0 8px; letter-spacing: 0.02em; text-shadow: 0 3px 18px rgba(0,0,0,0.8); }
   .overlay h1 span { color: #f2c94c; }
@@ -50,6 +54,34 @@
   .overlay button:hover { background: #ffd75e; }
   .overlay .keys { margin-top: 16px; font-size: 13px; color: #9aa3b2; }
   .overlay h2 { font-size: 38px; margin: 0 0 8px; }
+  /* Menu overlays (Stage E): briefing card, pause menu, controls table, results. */
+  .menu-stack { display: flex; flex-direction: column; gap: 8px; width: 320px; margin: 12px 0 4px; }
+  .menu-stack button { background: rgba(10, 14, 24, 0.72); color: #eef1f5; border: 1px solid rgba(238,241,245,0.25); border-radius: 10px; padding: 11px 16px; font-size: 15px; font-weight: 700; cursor: pointer; text-align: left; }
+  .menu-stack button:hover { background: rgba(40, 50, 70, 0.9); }
+  .menu-stack button.primary { background: #f2c94c; color: #231a05; border: none; text-align: center; }
+  .menu-stack button.primary:hover { background: #ffd75e; }
+  .menu-stack button.danger { color: #ff9d94; }
+  .brief-card { text-align: left; background: rgba(10, 14, 24, 0.72); border: 1px solid rgba(238,241,245,0.18); border-radius: 12px; padding: 14px 20px; margin: 12px 0 4px; max-width: 560px; }
+  .brief-card .row { margin: 8px 0; font-size: 15px; line-height: 1.45; }
+  .brief-card .row b { color: #f2c94c; }
+  .brief-card .row .tag { display: inline-block; min-width: 74px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #9aa3b2; }
+  .controls-table { text-align: left; background: rgba(10, 14, 24, 0.72); border: 1px solid rgba(238,241,245,0.18); border-radius: 12px; padding: 14px 20px; margin: 12px 0 4px; max-width: 600px; }
+  .controls-table .row { display: flex; gap: 14px; margin: 7px 0; font-size: 15px; line-height: 1.4; }
+  .controls-table .key { flex: 0 0 170px; color: #f2c94c; font-weight: 700; }
+  .results-score { font-size: 52px; font-weight: 900; color: #f2c94c; line-height: 1; margin: 4px 0 10px; }
+  .results-score small { font-size: 18px; color: #9aa3b2; font-weight: 600; }
+  .breakdown { text-align: left; background: rgba(10, 14, 24, 0.72); border: 1px solid rgba(238,241,245,0.18); border-radius: 12px; padding: 12px 20px; margin: 10px 0; width: 420px; max-width: 92vw; }
+  .breakdown .row { display: flex; justify-content: space-between; margin: 6px 0; font-size: 15px; }
+  .breakdown .row.total { border-top: 1px solid rgba(238,241,245,0.25); padding-top: 8px; font-weight: 800; font-size: 17px; }
+  .breakdown .row.total span:last-child { color: #f2c94c; }
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 420px; max-width: 92vw; margin: 4px 0 8px; }
+  .stat-grid .stat { background: rgba(10, 14, 24, 0.72); border: 1px solid rgba(238,241,245,0.18); border-radius: 10px; padding: 8px 6px; }
+  .stat-grid .stat .label { font-size: 10px; letter-spacing: 0.1em; color: #9aa3b2; text-transform: uppercase; }
+  .stat-grid .stat .value { font-size: 20px; font-weight: 700; }
+  .title-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+  .title-row button { background: rgba(10, 14, 24, 0.72); color: #eef1f5; border: 1px solid rgba(238,241,245,0.25); border-radius: 999px; padding: 10px 22px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .title-row button:hover { background: rgba(40, 50, 70, 0.9); }
+  .overlay .hint { margin-top: 14px; font-size: 13px; color: #9aa3b2; }
 </style>
 </head>
 <body>
@@ -117,18 +149,93 @@
     <button id="title-storm" style="background:#e5534b;color:#fff">⛈ Fly Storm Courier</button>
   </div>
   <div class="keys">Best score: <span id="title-best">0</span> · W/S or ↑/↓ pitch · A/D or ←/→ bank · Q/E rudder · hold Shift for throttle · P pause · R restart</div>
+  <div class="title-row">
+    <button id="title-controls">🎮 Controls</button>
+    <button id="title-sound">🔊 Sound: On</button>
+  </div>
+</div>
+
+<div id="briefing-screen" class="overlay hidden">
+  <h2 id="briefing-title">RING RUN</h2>
+  <p id="briefing-blurb"></p>
+  <div class="brief-card">
+    <div class="row"><span class="tag">Objective</span><span id="briefing-objective"></span></div>
+    <div class="row"><span class="tag">Win</span><span id="briefing-win"></span></div>
+    <div class="row"><span class="tag">Lose</span><span id="briefing-lose"></span></div>
+    <div class="row"><span class="tag">How to</span><span id="briefing-howto"></span></div>
+    <div class="row"><span class="tag">Scoring</span><span id="briefing-scoring"></span></div>
+  </div>
+  <div class="menu-stack">
+    <button id="briefing-start" class="primary">✈ Start Mission</button>
+    <button id="briefing-back">← Back to Missions</button>
+  </div>
+  <div class="hint">Enter starts · Esc goes back</div>
+</div>
+
+<div id="controls-screen" class="overlay hidden">
+  <h2>CONTROLS</h2>
+  <p>Fly the red bush plane. Throttle up, pitch up past 22 m/s to lift off, and keep her above stall speed (16 m/s).</p>
+  <div class="controls-table">
+    <div class="row"><span class="key">W / S or ↑ / ↓</span><span>Pitch nose down / up</span></div>
+    <div class="row"><span class="key">A / D or ← / →</span><span>Bank left / right (banking turns the plane)</span></div>
+    <div class="row"><span class="key">Q / E</span><span>Rudder left / right (fine heading trim)</span></div>
+    <div class="row"><span class="key">Hold Shift</span><span>Throttle up</span></div>
+    <div class="row"><span class="key">Ctrl or C</span><span>Throttle down</span></div>
+    <div class="row"><span class="key">P or Esc</span><span>Pause / resume</span></div>
+    <div class="row"><span class="key">R</span><span>Restart mission</span></div>
+    <div class="row"><span class="key">Space / Enter</span><span>Confirm — start, resume, retry</span></div>
+    <div class="row"><span class="key">Mouse</span><span>HUD buttons (Pause, Sound, Camera, Restart), the throttle slider, and the mission buttons</span></div>
+  </div>
+  <div class="controls-table">
+    <div class="row"><span class="key">Ring Run</span><span>Thread all 8 gold rings. Passed rings turn green; the next one pulses.</span></div>
+    <div class="row"><span class="key">Island Hop</span><span>Land on Pulau Karang 03/21, take off again, land back home 36/18.</span></div>
+    <div class="row"><span class="key">Storm Courier</span><span>Fly 6 courier rings, then land on Karang before the front closes the strait. Mind the east wind.</span></div>
+  </div>
+  <div class="menu-stack">
+    <button id="controls-back" class="primary">← Back</button>
+  </div>
+  <div class="hint">Esc closes</div>
 </div>
 
 <div id="pause-screen" class="overlay hidden">
-  <h2>Paused</h2>
-  <p>Press P or click below to keep flying.</p>
-  <button id="pause-resume">Resume</button>
+  <h2>PAUSED</h2>
+  <p id="pause-sub">Take a breath — the islands will wait.</p>
+  <div class="menu-stack">
+    <button id="pause-resume" class="primary">▶ Resume</button>
+    <button id="pause-restart">↻ Restart Mission</button>
+    <button id="pause-change">↗ Change Mission</button>
+    <button id="pause-sound">🔊 Sound: On</button>
+    <button id="pause-camera">📷 Camera: Chase</button>
+    <button id="pause-controls">🎮 Controls</button>
+    <button id="pause-quit" class="danger">✕ Quit to Title</button>
+  </div>
+  <div class="hint">Esc resumes · R restarts the mission</div>
 </div>
 
-<div id="end-screen" class="overlay hidden">
-  <h2 id="end-title">CRASHED</h2>
-  <p id="end-text"></p>
-  <button id="end-restart">↻ Fly again</button>
+<div id="results-screen" class="overlay hidden">
+  <h2 id="results-title">MISSION COMPLETE</h2>
+  <p id="results-sub"></p>
+  <div class="results-score"><span id="results-score">0</span> <small>pts</small></div>
+  <div class="breakdown">
+    <div class="row"><span id="results-rings-label">Rings 0 × 250</span><span id="results-rings">+0</span></div>
+    <div class="row"><span id="results-landings-label">Landings 0 × 750</span><span id="results-landings">+0</span></div>
+    <div class="row"><span id="results-bonus-label">Time bonus</span><span id="results-bonus">+0</span></div>
+    <div class="row total"><span>Total</span><span id="results-total">0</span></div>
+  </div>
+  <div class="stat-grid">
+    <div class="stat"><div class="label">Time</div><div class="value" id="results-time">0:00</div></div>
+    <div class="stat"><div class="label">Rings</div><div class="value" id="results-rings-stat">0/8</div></div>
+    <div class="stat"><div class="label">Landings</div><div class="value" id="results-landings-stat">0</div></div>
+    <div class="stat"><div class="label">Damage</div><div class="value" id="results-damage">0%</div></div>
+    <div class="stat"><div class="label">Fuel left</div><div class="value" id="results-fuel">100%</div></div>
+    <div class="stat"><div class="label">Best</div><div class="value" id="results-best">0</div></div>
+  </div>
+  <div class="menu-stack">
+    <button id="results-retry" class="primary">↻ Retry Mission</button>
+    <button id="results-next">➜ Next Mission</button>
+    <button id="results-menu">☰ Menu</button>
+  </div>
+  <div class="hint">Enter retries · Esc goes to the menu</div>
 </div>
 
 <script type="module" src="./src/main.js"></script>

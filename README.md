@@ -12,7 +12,7 @@ Three missions, one plane:
 2. **Island Hop** — land on Pulau Karang's 03/21 strip, take off again, and bring her home (750 pts per landing).
 3. **Storm Courier** — fly 6 courier rings and land the medicine on Pulau Karang before the storm front closes the strait: a 4-minute clock, a visible storm wall sliding in from the east, and an east wind pushing you back the whole way.
 
-The world: a hero volcano with a lighthouse on its shoulder, three foggy far islands, a winding river, ~650 pines, a sun-glitter path on the sea, and layered cumulus clouds. Arcade flight model with throttle, banking turns, stall, fuel and damage — plus a full HUD (altitude, speed, V/S, throttle, compass, attitude, archipelago map, mission card, storm-front panel) and keyboard + mouse + touch-friendly controls.
+The world: a hero volcano with a lighthouse on its shoulder, three foggy far islands, a winding river, ~650 pines, a sun-glitter path on the sea, and layered cumulus clouds. Arcade flight model with throttle, banking turns, stall, fuel and damage — plus a full HUD (altitude, speed, V/S, throttle, compass, attitude, a true-to-terrain archipelago map, mission card, storm-front panel) and keyboard + mouse + touch-friendly controls. Every mission opens with a briefing card (objective, win/lose, scoring); a full pause menu (resume, restart, change mission, sound, camera, controls, quit), a controls overlay, and a results screen with the score breakdown (rings, landings, time bonus) and run stats round out the menu system.
 
 ## Run it
 
@@ -20,7 +20,7 @@ The world: a hero volcano with a lighthouse on its shoulder, three foggy far isl
 node serve.ts
 ```
 
-Then open http://localhost:8080 and fly. W/S or ↑/↓ pitch, A/D or ←/→ bank, Q/E rudder, hold Shift for throttle, P pause, R restart. Pick a mission on the title screen.
+Then open http://localhost:8080 and fly. W/S or ↑/↓ pitch, A/D or ←/→ bank, Q/E rudder, hold Shift for throttle, P pause, R restart. Pick a mission on the title screen — each one opens with a briefing card before it starts. Esc closes any menu.
 
 ---
 

@@ -11,6 +11,18 @@
 // also fixed the plane's yaw sign (rotation.y = -heading): the model had flown
 // tail-first on every heading but due north/south since Stage A — the nose dot the
 // flight direction measured 0.30 at 36° instead of 1.00.
+// Stage E polish (2026-11-26): the archipelago minimap is redrawn from the real
+// terrain (groundAt/ISLANDS) — true island shapes, runway lines with "36"/"03",
+// gold ring dots, volcano + lighthouse markers, the storm front band, and a
+// heading-correct plane marker with a bearing line to the next ring; clouds are
+// more volumetric (more varied puffs, bright tops, soft grey undersides, storm
+// clouds darker and denser than fair-weather ones) and no hero cloud is clipped
+// by the frame edge; the time bonus (+5/s of timeLeft at completion, awarded once)
+// is applied identically in the browser and in the Node sim; and the menu system
+// is complete — mission briefing before every start, a full pause menu, a controls
+// overlay, and a results screen with the score breakdown (rings, landings, time
+// bonus) and run stats. Sound and camera each have one source of truth, so the HUD
+// button, the title button and the pause menu can never disagree.
 // This program copies game/ and screenshots/ from beside this file to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 // The copy is byte for byte the same on every run: no timestamps, no randomness here.
@@ -19,7 +31,7 @@
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
@@ -43,6 +55,17 @@ const DOSSIER_CAPS = {
 
 mkdirSync(out, { recursive: true });
 cpSync(gameDir, join(out, 'game'), { recursive: true });
+
+// Stage E menus are part of the hand-in: the briefing, controls, pause and
+// results overlays must exist in game/index.html, or the game would ship with
+// buttons that open nothing. Refuse a hand-in that lost one.
+const MENU_OVERLAYS = ['briefing-screen', 'controls-screen', 'pause-screen', 'results-screen'];
+const html = readFileSync(join(gameDir, 'index.html'), 'utf8');
+for (const id of MENU_OVERLAYS) {
+  if (!html.includes(`id="${id}"`)) throw new Error(`main.ts: menu overlay #${id} missing from game/index.html`);
+}
+console.log(`menus: ${MENU_OVERLAYS.join(', ')} present in game/index.html`);
+
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 const shotFiles = existsSync(shotsDir)
   ? readdirSync(shotsDir).filter((name) => !name.startsWith('.'))

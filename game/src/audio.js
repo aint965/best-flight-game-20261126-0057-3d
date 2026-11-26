@@ -67,6 +67,14 @@ export function createAudio() {
       if (!enabled && engineGain) engineGain.gain.value = 0;
       return enabled;
     },
+    /** Set the sound state directly (the menu system is the single source of
+     *  truth for it — the HUD button, the title button and the pause menu all
+     *  write through here, so they can never disagree). */
+    set(on) {
+      enabled = !!on;
+      if (!enabled && engineGain) engineGain.gain.value = 0;
+      return enabled;
+    },
     isEnabled() {
       return enabled;
     },
