@@ -3,11 +3,17 @@
 // move are the plane, the rings and the clouds' slow drift is baked into their placement.
 import * as THREE from '../vendor/three.module.min.js';
 import { PALETTE } from './config.js';
-import { ISLANDS, RUNWAYS, groundAt, onRunwayPlateau } from './world.js';
+import { ISLANDS, RUNWAYS, LIGHTHOUSE, groundAt, onRunwayPlateau } from './world.js';
 import { createRandom, fbm2, valueNoise } from './random.js';
 import { SEED } from './world.js';
 
-const SUN_DIR = new THREE.Vector3(-0.9, 0.22, -0.28).normalize();
+// The HIGH midday sun — nearly overhead, a touch west and south (late-November
+// noon over Indonesia). Shadows are short and fall east-north; the cockpit glare
+// fires when the pilot looks UP into it, not west into a sunset. It used to be
+// low in the west (-0.9, 0.22, -0.28); the sunset version stays in git (eab0844).
+// Exported for the cockpit glare: the glare quad's opacity follows how directly
+// the pilot is looking into it.
+export const SUN_DIR = new THREE.Vector3(-0.18, 0.90, 0.38).normalize();
 const TERRAIN_CENTER = { x: 1350, z: -450 };
 
 /** The home island's river, from its spring pond down to the north-west shore.
@@ -149,15 +155,16 @@ function buildSky(scene) {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(9000, 24, 16), skyMat);
   scene.add(sky);
 
-  // The sun's glow: a soft radial sprite sitting low in the west.
+  // The sun's glow: a soft radial sprite, high in the sky at midday — whiter
+  // and smaller than the low sunset disc was.
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 256;
   const ctx = canvas.getContext('2d');
   const grad = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-  grad.addColorStop(0, 'rgba(255, 240, 200, 1)');
-  grad.addColorStop(0.25, 'rgba(255, 210, 140, 0.55)');
-  grad.addColorStop(1, 'rgba(255, 170, 80, 0)');
+  grad.addColorStop(0, 'rgba(255, 252, 240, 1)');
+  grad.addColorStop(0.25, 'rgba(255, 244, 200, 0.5)');
+  grad.addColorStop(1, 'rgba(255, 240, 190, 0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 256, 256);
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -167,14 +174,16 @@ function buildSky(scene) {
     fog: false,
   }));
   glow.position.copy(SUN_DIR).multiplyScalar(8200);
-  glow.scale.set(3200, 3200, 1);
+  glow.scale.set(2400, 2400, 1);
   scene.add(glow);
 
-  const sun = new THREE.DirectionalLight(0xffd9a0, 1.7);
+  // Midday light: a strong near-white sun from high above, a blue sky bounce
+  // from above and a warm ground bounce from below, pale-blue fog.
+  const sun = new THREE.DirectionalLight(0xfff1d6, 2.1);
   sun.position.copy(SUN_DIR).multiplyScalar(1000);
   scene.add(sun);
-  scene.add(new THREE.HemisphereLight(0x8a7fc0, 0x3d5a4a, 0.75));
-  scene.fog = new THREE.Fog(0xf7a56a, 1800, 9500);
+  scene.add(new THREE.HemisphereLight(0x9cc8f0, 0x7a8a58, 0.85));
+  scene.fog = new THREE.Fog(PALETTE.fog, 1800, 9500);
 }
 
 /** A seeded speckle canvas, tiled over the terrain so close ground has grain: the
@@ -247,7 +256,11 @@ function buildTerrainMesh(scene) {
       const t = clamp(0.5 + 0.5 * n + fine * 0.45 + speckle * 0.12, 0, 1);
       if (t < 0.5) c.copy(cGrassA).lerp(cGrassDark, t * 1.1);
       else c.copy(cGrassA).lerp(cGrassB, (t - 0.5) * 2);
-      if (fbm2(wx, wz, SEED + 17) > 0.22) c.multiplyScalar(0.58);
+      // Stage F, second pass: the dark patches were multiplied by 0.58 — deep pits
+      // that read darker than the trees standing on them, which broke the
+      // tree/ground match. 0.72 keeps the mottling without dropping the ground out
+      // of the trees' lightness band.
+      if (fbm2(wx, wz, SEED + 17) > 0.22) c.multiplyScalar(0.72);
       c.offsetHSL(0, 0, fine * 0.12 + speckle * 0.03);
     }
     if (slope > 0.45) c.lerp(cRock, smoothstep(0.45, 0.9, slope));
@@ -287,7 +300,7 @@ function buildTerrainMesh(scene) {
 function buildSea(scene, rng) {
   const sea = new THREE.Mesh(
     new THREE.CircleGeometry(7500, 48),
-    new THREE.MeshPhongMaterial({ color: PALETTE.sea, shininess: 180, specular: 0xffd9a0 }),
+    new THREE.MeshPhongMaterial({ color: PALETTE.sea, shininess: 180, specular: 0xffffff }),
   );
   sea.rotation.x = -Math.PI / 2;
   sea.position.set(TERRAIN_CENTER.x, 0.15, TERRAIN_CENTER.z);
@@ -299,13 +312,13 @@ function buildSea(scene, rng) {
   // Stage D: the scattered quads are much smaller and fewer (the Stage C ones read
   // as white confetti in the cover foreground), the band is a bright core line with
   // a softer halo, and the colour is per-quad (additive blending: dimmer colour =
-  // dimmer glitter).
+  // dimmer glitter). Stage F, second pass: white at midday, not warm gold.
   const glitterMat = new THREE.MeshBasicMaterial({
     vertexColors: true, transparent: true, opacity: 0.6,
     blending: THREE.AdditiveBlending, depthWrite: false,
   });
   const quads = [];
-  const warm = new THREE.Color(0xffe9b0);
+  const warm = new THREE.Color(0xffffff);
   for (let i = 0; i < 120; i += 1) {
     // Sparse sparkle away from the path: small, dim, never a plank.
     const g = new THREE.PlaneGeometry(rng.range(3, 6), rng.range(0.8, 1.5));
@@ -341,20 +354,22 @@ function buildSea(scene, rng) {
   const glitter = new THREE.Mesh(mergePartsColor(quads), glitterMat);
   scene.add(glitter);
 
-  // The sun path: one long soft streak of warm light on the water, brightest toward
-  // the western horizon and fading as it runs east — it reads from any camera angle,
-  // where a view-dependent specular highlight would not. Stage C stretches it east
-  // past the volcano (its tail now crosses the cover frame's sea) with a longer fade.
-  // Second pass: the tail was too faint to read — the mid gradient is brighter now.
+  // The sun path: one long soft streak of white midday light on the water,
+  // brightest toward the western horizon and fading as it runs east — it reads
+  // from any camera angle, where a view-dependent specular highlight would not.
+  // Stage C stretches it east past the volcano (its tail now crosses the cover
+  // frame's sea) with a longer fade. Second pass: the tail was too faint to read —
+  // the mid gradient is brighter now. Stage F, second pass: white, not warm gold,
+  // and dimmer (0.4) — a high sun makes a softer, whiter path than a low one.
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 128;
   const ctx = canvas.getContext('2d');
   const grad = ctx.createLinearGradient(0, 0, 512, 0);
-  grad.addColorStop(0, 'rgba(255, 220, 150, 0.9)');
-  grad.addColorStop(0.45, 'rgba(255, 200, 120, 0.65)');
-  grad.addColorStop(0.75, 'rgba(255, 200, 120, 0.3)');
-  grad.addColorStop(1, 'rgba(255, 200, 120, 0)');
+  grad.addColorStop(0, 'rgba(255, 252, 240, 0.9)');
+  grad.addColorStop(0.45, 'rgba(255, 250, 225, 0.6)');
+  grad.addColorStop(0.75, 'rgba(255, 250, 225, 0.28)');
+  grad.addColorStop(1, 'rgba(255, 250, 225, 0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 512, 128);
   const gradY = ctx.createLinearGradient(0, 0, 0, 128);
@@ -368,7 +383,7 @@ function buildSea(scene, rng) {
   const path = new THREE.Mesh(
     new THREE.PlaneGeometry(9100, 1400),
     new THREE.MeshBasicMaterial({
-      map: new THREE.CanvasTexture(canvas), transparent: true, opacity: 0.55,
+      map: new THREE.CanvasTexture(canvas), transparent: true, opacity: 0.4,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }),
   );
@@ -562,7 +577,12 @@ function buildTrees(scene, rng) {
     p.set(x, h + (3 + 8) * scale, z);
     m.compose(p, q, s);
     cones2.setMatrixAt(i, m);
-    col.setHSL(0.33 + rng.next() * 0.04, 0.55, 0.28 + rng.next() * 0.12);
+    // Stage F, second pass — the tree/ground mismatch: pines were HSL(0.33–0.37,
+    // 0.55, 0.28–0.40), a saturated pure green, while the ground is a muted
+    // yellow-olive (hue ~0.28, sat 0.30–0.38). Now hue 0.29–0.32, sat 0.42,
+    // lightness 0.30–0.42 — the same yellow-green family as the grass, a touch
+    // darker and richer, so the trees sit in the ground instead of floating on it.
+    col.setHSL(0.29 + rng.next() * 0.03, 0.42, 0.30 + rng.next() * 0.12);
     cones.setColorAt(i, col);
     cones2.setColorAt(i, col);
   });
@@ -622,7 +642,10 @@ function buildDetail(scene, rng) {
     p.set(x, h + 0.8 * scale, z);
     m.compose(p, q, s);
     bushMesh.setMatrixAt(i, m);
-    col.setHSL(0.29 + rng.next() * 0.05, 0.5, 0.22 + rng.next() * 0.1);
+    // Same family as the pines and the grass (hue ~0.28–0.32, sat 0.42) — the
+    // bushes are the transition between tree and ground, so they must not be a
+    // third green of their own.
+    col.setHSL(0.28 + rng.next() * 0.04, 0.42, 0.28 + rng.next() * 0.1);
     bushMesh.setColorAt(i, col);
   });
   const rockGeo = new THREE.DodecahedronGeometry(1.1, 0);
@@ -666,101 +689,130 @@ function buildVolcanoDetails(scene) {
   crater.rotation.x = -Math.PI / 2;
   crater.position.set(v.x, 556, v.z); // the crater floor, not the rim
   scene.add(crater);
+  // The volcano stands BARE now — crater, ash cap, strata, no tower. The
+  // lighthouse used to stand on its west shoulder (a 120 m tower on a 650 m
+  // mountain); it lives on the coast now, in buildLighthouse below.
+}
 
-  // The lighthouse on the volcano's WEST shoulder, facing the cover camera and the
-  // incoming plane. Stage D: 120 m tall and 30 m wide, moved 350 m further west
-  // (to 3200, -120) — the Stage C tower was 60 m and read as ~14 px from the cover
-  // camera; at ~2.6 km a 120 m tower reads ~30 px, a tower, not a dot. A short
-  // faint beam points west toward the incoming plane.
-  const lx = v.x - 700;
-  const lz = v.z - 120;
+/** The lighthouse — on the SOUTH TIP of Pulau Karang (LIGHTHOUSE, world.js),
+ *  guarding the strait, not on the volcano. A real lighthouse stands on a rocky
+ *  shore at sea level, and a 120 m tower on a 650 m volcano read as a monument
+ *  on a mountain. This one is a 32 m coastal tower on a rock plinth at the
+ *  water's edge: white with red bands, a cottage, a lamp and a beam that sweeps
+ *  the sea surface west down the strait toward the home strip, where the planes
+ *  fly. The minimap reads the same LIGHTHOUSE constant, so its marker can never
+ *  drift from the tower. */
+function buildLighthouse(scene) {
+  const lx = LIGHTHOUSE.x;
+  const lz = LIGHTHOUSE.z;
   const gy = groundAt(lx, lz);
   const house = new THREE.Group();
-  house.position.set(lx, gy, lz);
-  const skirt = new THREE.Mesh(
-    new THREE.CylinderGeometry(22, 24, 7, 10),
-    new THREE.MeshLambertMaterial({ color: 0xf4ede0 }),
+  // The shore here is beach-flat (groundAt ≈ 0 ± 2 m), so the tower stands on a
+  // rock plinth that rises out of the water whatever the exact beach height is:
+  // the plinth top is always ~6 m above sea level, the lamp ~41 m.
+  const baseY = Math.max(gy, -1);
+  house.position.set(lx, baseY, lz);
+  const plinth = new THREE.Mesh(
+    new THREE.CylinderGeometry(9, 13, 8, 10),
+    new THREE.MeshLambertMaterial({ color: 0x6a625a }),
   );
-  skirt.position.y = 3.5;
-  house.add(skirt);
+  plinth.position.y = 4;
+  house.add(plinth);
+  // Shore rocks around the plinth, breaking the waterline.
+  const rockGeo = new THREE.DodecahedronGeometry(2.2, 0);
+  const rockMat = new THREE.MeshLambertMaterial({ color: 0x5e564e });
+  for (const [rx, rz, s] of [[-11, 4, 1.4], [10, -6, 1.1], [6, 10, 0.9], [-7, -10, 1.2]]) {
+    const rock = new THREE.Mesh(rockGeo, rockMat);
+    rock.position.set(rx, 0.5, rz);
+    rock.scale.setScalar(s);
+    rock.rotation.y = rx * 0.7;
+    house.add(rock);
+  }
   const tower = new THREE.Mesh(
-    new THREE.CylinderGeometry(12, 15, 120, 10),
+    new THREE.CylinderGeometry(2.6, 3.6, 32, 10),
     new THREE.MeshLambertMaterial({ color: 0xf4ede0 }),
   );
-  tower.position.y = 60;
+  tower.position.y = 8 + 16;
   house.add(tower);
-  for (const by of [36, 84]) {
+  for (const [by, br] of [[8 + 11, 3.4], [8 + 23, 3.0]]) {
     const band = new THREE.Mesh(
-      new THREE.CylinderGeometry(15.5, 15.5, 5, 10),
+      new THREE.CylinderGeometry(br, br, 2.5, 10),
       new THREE.MeshLambertMaterial({ color: 0xc23b2a }),
     );
     band.position.y = by;
     house.add(band);
   }
   const lamp = new THREE.Mesh(
-    new THREE.SphereGeometry(6, 10, 8),
-    new THREE.MeshBasicMaterial({ color: 0xffe9a0 }),
+    new THREE.SphereGeometry(1.8, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0xfff6d8 }),
   );
-  lamp.position.y = 122;
+  lamp.position.y = 8 + 33;
   house.add(lamp);
   const roof = new THREE.Mesh(
-    new THREE.ConeGeometry(15, 8, 10),
+    new THREE.ConeGeometry(3.6, 2.6, 10),
     new THREE.MeshLambertMaterial({ color: 0xc23b2a }),
   );
-  roof.position.y = 128;
+  roof.position.y = 8 + 35.2;
   house.add(roof);
   const cottage = new THREE.Mesh(
-    new THREE.BoxGeometry(11, 6, 8),
+    new THREE.BoxGeometry(8, 4.5, 6),
     new THREE.MeshLambertMaterial({ color: 0xf4ede0 }),
   );
-  cottage.position.set(15, 3, 6);
+  cottage.position.set(11, 8 + 2.25, 5);
   house.add(cottage);
   const cottageRoof = new THREE.Mesh(
-    new THREE.ConeGeometry(8, 4.5, 4),
+    new THREE.ConeGeometry(6, 3.4, 4),
     new THREE.MeshLambertMaterial({ color: 0xc23b2a }),
   );
-  cottageRoof.position.set(15, 8.2, 6);
+  cottageRoof.position.set(11, 8 + 6.2, 5);
   cottageRoof.rotation.y = Math.PI / 4;
   house.add(cottageRoof);
-  // A beam that reads at dusk: brighter and longer than the Stage D one (opacity
-  // 0.12, 350 m — invisible in every frame), widening west toward the incoming
-  // plane: apex at the lamp, base 500 m out. ConeGeometry's apex is at +Y/2, so
-  // rotate -90° about Z to lay the axis along X with the apex east, then centre it
-  // half its length west.
+  // The beam sweeps the SEA, not the sky: it points west-south-west down the
+  // strait toward the home strip — the group is yawed ~9.5° south of west, the
+  // direction from the lighthouse to the home strip — and tilts ~5° down so its
+  // far end kisses the water 400 m out. At midday it is a faint haze (opacity
+  // 0.18), not a searchlight, but it is there.
+  const beamGroup = new THREE.Group();
+  beamGroup.rotation.y = 0.165;
   const beam = new THREE.Mesh(
-    new THREE.ConeGeometry(55, 500, 12, 1, true),
+    new THREE.ConeGeometry(26, 400, 12, 1, true),
     new THREE.MeshBasicMaterial({
-      color: 0xffe9a0, transparent: true, opacity: 0.25,
+      color: 0xfff2c0, transparent: true, opacity: 0.18,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
     }),
   );
-  beam.rotation.z = -Math.PI / 2;
-  beam.position.set(-250, 122, 0);
-  house.add(beam);
+  // ConeGeometry's apex is at +Y/2: rotate -90° about Z to lay the axis along X
+  // with the apex east, tilt 5° so the far (west) end drops, then centre the cone
+  // half its length out from the lamp.
+  beam.rotation.z = -Math.PI / 2 + 0.09;
+  beam.position.set(-199, 8 + 33 - 17, 0);
+  beamGroup.add(beam);
+  house.add(beamGroup);
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
   const ctx = canvas.getContext('2d');
   const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(255, 233, 160, 0.9)');
-  grad.addColorStop(1, 'rgba(255, 233, 160, 0)');
+  grad.addColorStop(0, 'rgba(255, 246, 216, 0.9)');
+  grad.addColorStop(1, 'rgba(255, 246, 216, 0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 64, 64);
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
     map: new THREE.CanvasTexture(canvas), blending: THREE.AdditiveBlending, depthWrite: false,
   }));
-  glow.position.y = 122;
-  glow.scale.set(200, 200, 1);
+  glow.position.y = 8 + 33;
+  glow.scale.set(50, 50, 1);
   house.add(glow);
   scene.add(house);
 }
 
 /** True when a cloud centre would sit in front of the volcano hero or the
  *  lighthouse in one of the two frames that show them — the cover (camera ~790 m
- *  east of home, looking east at the volcano) or the rings shot (camera looking
- *  south-east at the lighthouse on the volcano's west shoulder). Stage D added
- *  bigger clouds and one landed right over the mountain in both frames, hiding the
- *  hero and the lighthouse it was meant to show. */
+ *  east of home, looking east at the volcano, with the lighthouse on Karang's
+ *  south tip low mid-frame) or the rings shot (camera looking east-south-east at
+ *  the lighthouse on the coast). Stage D added bigger clouds and one landed right
+ *  over the mountain in both frames, hiding the hero and the lighthouse it was
+ *  meant to show. */
 function blocksHero(cx, cy, cz) {
   // Cover cone: from (790, 140, -200), axis east. The volcano's angular box from
   // there is roughly ha -15°..+22°, va -3°..+9°; the margins allow for cloud size.
@@ -772,13 +824,25 @@ function blocksHero(cx, cy, cz) {
     const va = Math.atan2(dy, dx);
     if (ha > -0.38 && ha < 0.45 && va > -0.10 && va < 0.28) return true;
   }
-  // Rings-shot cone: from (428, 118, -343) toward the lighthouse (3200, 300, -120).
+  // Cover lighthouse cone: from the same camera toward the lighthouse lamp
+  // (1500, 41, -250) — a cloud within ~4.4° of that sightline, 300–1500 m out,
+  // would sit on the tower in the frame.
+  const ldx = cx - 790;
+  const ldy = cy - 140;
+  const ldz = cz + 200;
+  const lvLen = Math.sqrt(ldx * ldx + ldy * ldy + ldz * ldz);
+  const laLen = Math.sqrt(710 * 710 + 99 * 99 + 50 * 50);
+  if (lvLen > 300 && lvLen < 1500) {
+    const cos = (ldx * 710 + ldy * -99 + ldz * -50) / (lvLen * laLen);
+    if (cos > 0.997) return true;
+  }
+  // Rings-shot cone: from (428, 118, -343) toward the lighthouse lamp (1500, 41, -250).
   const vx = cx - 428;
   const vy = cy - 118;
   const vz = cz + 343;
-  const ax = 2772;
-  const ay = 182;
-  const az = 223;
+  const ax = 1072;
+  const ay = -77;
+  const az = 93;
   const vLen = Math.sqrt(vx * vx + vy * vy + vz * vz);
   const aLen = Math.sqrt(ax * ax + ay * ay + az * az);
   if (vLen > 100 && vLen < 2850) {
@@ -819,14 +883,16 @@ function buildClouds(scene, rng) {
   // Hop frame looks at (it was empty), two over the western sea.
   // Stage D: 9–13 puffs per cluster (was 6–9), 1–3 towers, a per-cluster size scale
   // for shape variety, 10-puff heroes — plus soft cloud shadows on the sea and the
-  // flat home plateau, offset east (the sun is low in the west, so real shadows at
-  // sunset are long; a fixed offset reads as a shadow without leaving the frame).
+  // flat home plateau. Stage F, second pass: a high midday sun throws SHORT
+  // shadows, just east and a touch north of the cloud — the old offset (1.5× the
+  // cloud's height east) was a long sunset shadow and would read as a smear
+  // nowhere near its cloud at noon.
   const cBase = new THREE.Color(0xdfe3ec);
   const cMid = new THREE.Color(0xeef0f5);
   const cTop = new THREE.Color(0xffffff);
   const mat = new THREE.MeshLambertMaterial({
     vertexColors: true, transparent: true, opacity: 0.92,
-    emissive: 0x707684, emissiveIntensity: 0.45,
+    emissive: 0x8a94a8, emissiveIntensity: 0.35,
   });
   function cluster(cx, cy, cz, puffs) {
     const parts = [];
@@ -912,8 +978,8 @@ function buildClouds(scene, rng) {
     sh.rotation.x = -Math.PI / 2;
     const w = rng.range(180, 320);
     sh.scale.set(w, w * rng.range(0.55, 0.75), 1);
-    // East and a little south of the cloud, as a low western sun throws it.
-    sh.position.set(sx + sy * 1.5, 0.6, sz + sy * 0.5);
+    // Just east and a touch north of the cloud, as a high midday sun throws it.
+    sh.position.set(sx + sy * 0.35, 0.6, sz - sy * 0.25);
     scene.add(sh);
   }
   // Two shadows on the flat home plateau, where the ground is level enough that a
@@ -967,6 +1033,7 @@ export function buildWorld(scene) {
   buildTrees(scene, rng);
   buildDetail(scene, rng);
   buildVolcanoDetails(scene);
+  buildLighthouse(scene);
   buildClouds(scene, rng);
   const stormWall = buildStormWall(scene, rng);
   return { stormWall };

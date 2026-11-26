@@ -6,6 +6,7 @@ import { STEP } from './config.js';
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
 export const ACTION_RESTART = 4;
+export const ACTION_CAMERA = 8;
 
 const PITCH_UP = new Set(['ArrowDown', 'KeyS']);
 const PITCH_DOWN = new Set(['ArrowUp', 'KeyW']);
@@ -18,6 +19,7 @@ const THROTTLE_DOWN = new Set(['ControlLeft', 'ControlRight', 'KeyC']);
 const CONFIRM = new Set(['Space', 'Enter']);
 const PAUSE = new Set(['KeyP', 'Escape']);
 const RESTART = new Set(['KeyR']);
+const CAMERA = new Set(['KeyV']);
 
 export function createInput() {
   const held = new Set();
@@ -30,6 +32,8 @@ export function createInput() {
       if (!event.repeat) actions |= ACTION_PAUSE;
     } else if (RESTART.has(event.code)) {
       if (!event.repeat) actions |= ACTION_RESTART;
+    } else if (CAMERA.has(event.code)) {
+      if (!event.repeat) actions |= ACTION_CAMERA;
     } else if (
       PITCH_UP.has(event.code) || PITCH_DOWN.has(event.code)
       || ROLL_LEFT.has(event.code) || ROLL_RIGHT.has(event.code)

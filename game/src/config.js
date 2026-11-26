@@ -69,24 +69,31 @@ export const MISSION_DEFS = [
 export const SCORE_RULES = { ring: 250, landing: 750, timeBonusPerSecond: 5 };
 
 export const PALETTE = {
-  skyTop: '#1c2f6e',
-  skyMid: '#7a6fb0',
-  skyHorizon: '#ff9a3c',
-  sun: '#ffd9a0',
-  fog: '#f7a56a',
-  sea: '#1a5f7d', // Stage D: the deep blue again — the mid blue went pale grey-blue
-  // under the sun path + fill light + fog in the cover frame; glitter stays bright
-  // only along the path, the rest of the sea reads deep.
-  seaDeep: '#1a5f7d',
+  // MIDDAY (Stage F, second pass): the whole atmosphere is noon, not sunset —
+  // a clear blue sky, a high white sun, pale-blue fog, a bright midday sea.
+  // The sunset values stay safe in git (commit eab0844) if the user prefers them.
+  skyTop: '#2568c8',
+  skyMid: '#6fa8e0',
+  skyHorizon: '#cfe9f8',
+  sun: '#fff2cf',
+  fog: '#bcd9ee',
+  sea: '#1f7fb2', // bright midday blue — the deep navy was a sunset sea
+  // The greens are ONE family now (Stage F, second pass): the pines used to be a
+  // saturated pure green (hue 0.33, sat 0.55) on a muted yellow-olive ground
+  // (hue 0.28, sat 0.30–0.38) — different hue, different saturation, so the trees
+  // looked pasted on. Grass and trees now share hue ~0.28–0.30 and saturation
+  // ~0.3–0.42: the trees are a touch darker and richer than the ground, the way
+  // real foliage is, but they sit IN the same light.
+  seaDeep: '#1f7fb2',
   sand: '#e8d29a',
-  grassA: '#5d8a4a',
-  grassB: '#7aa85c',
-  grassDark: '#42682f',
-  forest: '#2f6b3a',
-  rock: '#8a6f5c',
-  rockDark: '#5e463a',
+  grassA: '#69a04e',
+  grassB: '#8cbc68',
+  grassDark: '#4a7a37',
+  forest: '#4f8f3e',
+  rock: '#93755f',
+  rockDark: '#6a4f3e',
   ash: '#b9b3a8',
-  seabed: '#3d5a4a',
+  seabed: '#41705c',
   asphalt: '#41464f',
   marking: '#f2f2e8',
   planeRed: '#d23c28',

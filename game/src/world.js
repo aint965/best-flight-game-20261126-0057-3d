@@ -5,7 +5,7 @@
 // Layout (metres, x east, z south, y up, sea level 0):
 //   home island    (0, 0), radius 950 — the 36/18 strip on a grass plateau
 //   Pulau Karang    (1500, -900), radius 700 — the 03/21 strip
-//   volcano        (3900, 0), radius 1100, peak 650 — the hero, lighthouse on its shoulder
+//   volcano        (3900, 0), radius 1100, peak 650 — the hero, bare: crater + ash cap
 //   far islands    three foggy silhouettes at the map's edges
 import { fbm2 } from './random.js';
 import { RING } from './config.js';
@@ -21,8 +21,13 @@ export const ISLANDS = [
   { name: 'far-east', x: 5200, z: -2200, radius: 1000, peak: 180, basePeak: 180, hillX: 5200, hillZ: -2200 },
 ];
 
-/** The lighthouse on the volcano's west shoulder (terrain.js builds it here). */
-export const LIGHTHOUSE = { x: 3200, z: -120 };
+/** The lighthouse on the SOUTH TIP of Pulau Karang (1500, -250), guarding the
+ *  strait between home and Karang — a rocky shore at sea level, where a real
+ *  lighthouse stands. It used to sit on the volcano's west shoulder (3200, -120),
+ *  a 120 m tower on a 650 m mountain: a monument, not a lighthouse. terrain.js
+ *  builds the tower here, and the minimap reads this same constant, so its
+ *  marker can never drift from the tower. */
+export const LIGHTHOUSE = { x: 1500, z: -250 };
 
 /** Runways: flat grass plateaus the strips sit on. heading is a compass heading in radians. */
 export const RUNWAYS = [

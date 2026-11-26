@@ -11,10 +11,11 @@ import { BEST_KEY, MAX_FRAME, MISSION_DEFS, SCORE_RULES, STEP } from './config.j
 import { ISLANDS, groundAt, homeSpawn, onStrip } from './world.js';
 import { buildWorld } from './terrain.js';
 import { buildPlane } from './plane.js';
+import { buildCockpit } from './cockpit.js';
 import { buildRings } from './rings.js';
 import { createFlight, stepFlight, EVENT_CRASHED, EVENT_LANDED, EVENT_RING } from './physics.js';
 import { createHud } from './hud.js';
-import { ACTION_CONFIRM, ACTION_PAUSE, ACTION_RESTART, createInput } from './input.js';
+import { ACTION_CAMERA, ACTION_CONFIRM, ACTION_PAUSE, ACTION_RESTART, createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { autopilotInput, stageShot } from './shots.js';
 import { applyMissionWind, createMission, missionStep, initialObjective } from './missions.js';
@@ -36,7 +37,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.12;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.5, 20000);
@@ -44,13 +45,14 @@ camera.position.set(600, 140, 900);
 
 const { stormWall } = buildWorld(scene);
 const plane = buildPlane(scene);
+const cockpit = buildCockpit(plane.group);
 const rings = buildRings(scene);
 
-// A warm fill light that rides with the camera, pointed at the plane: it lights
-// whatever the camera looks at, so the plane's camera-facing side never goes black
-// when the sun is behind it (Stage B's landing frame was a dark silhouette). Kept
-// modest (0.45) so the sunset mood is lifted, not flattened.
-const fillLight = new THREE.DirectionalLight(0xffe0b8, 0.45);
+// A cool daylight fill light that rides with the camera, pointed at the plane:
+// it lights whatever the camera looks at, so the plane's camera-facing side never
+// goes black when the sun is behind it (Stage B's landing frame was a dark
+// silhouette). Kept modest (0.5) so the midday light is lifted, not flattened.
+const fillLight = new THREE.DirectionalLight(0xdfeaf8, 0.5);
 fillLight.position.set(0, 200, 500);
 scene.add(fillLight);
 scene.add(fillLight.target);
@@ -91,15 +93,25 @@ function setSound(on) {
   return soundOn;
 }
 
+/** Camera: three modes, one writer. Chase and Far look back at the plane from
+ *  behind; Cockpit sits in the pilot's seat — the camera takes the plane's own
+ *  orientation, so the view banks and pitches with the aircraft. The cockpit
+ *  mode also adds a body class that hides the duplicative HTML instrument
+ *  panels (the six-pack in the 3D panel replaces them). */
 function setCamMode(mode) {
   camMode = mode;
   camSettled = false;
-  const label = `📷 Camera: ${camMode === 'far' ? 'Far' : 'Chase'}`;
+  document.body.classList.toggle('cockpit-mode', mode === 'cockpit');
+  const label = `📷 Camera: ${mode === 'far' ? 'Far' : mode === 'cockpit' ? 'Cockpit' : 'Chase'}`;
   const hudBtn = document.getElementById('btn-camera');
   if (hudBtn) hudBtn.textContent = '📷 Camera';
   const pauseBtn = document.getElementById('pause-camera');
   if (pauseBtn) pauseBtn.textContent = label;
   return camMode;
+}
+
+function cycleCamMode() {
+  return setCamMode(camMode === 'chase' ? 'cockpit' : camMode === 'cockpit' ? 'far' : 'chase');
 }
 
 /** Hide every overlay; the caller then shows the one it wants. Also clears the
@@ -305,6 +317,19 @@ function startGame(missionId = mission.id) {
 }
 
 function updateCamera(dt) {
+  if (camMode === 'cockpit') {
+    // In the pilot's seat: the camera sits at the eye point and takes the
+    // plane's own orientation, so the view banks and pitches with the aircraft.
+    // Snapped, not lerped — a lerped cockpit would lag the plane it sits in.
+    const eye = new THREE.Vector3(0, 0.75, 0.50);
+    plane.group.localToWorld(eye);
+    camera.position.copy(eye);
+    camera.quaternion.copy(plane.group.quaternion);
+    fillLight.position.copy(camera.position);
+    fillLight.target.position.set(flight.x, flight.y, flight.z);
+    camSettled = true;
+    return;
+  }
   const fx = Math.sin(flight.heading);
   const fz = -Math.cos(flight.heading);
   const dist = camMode === 'far' ? 36 : 24;
@@ -350,6 +375,9 @@ function handleActions() {
   if (actions & ACTION_RESTART) {
     if (screen === 'play' || screen === 'paused' || screen === 'results') startGame(mission.id);
   }
+  if (actions & ACTION_CAMERA) {
+    if (screen === 'play') cycleCamMode();
+  }
 }
 
 function wireButtons() {
@@ -363,7 +391,7 @@ function wireButtons() {
     setSound(!soundOn);
   });
   document.getElementById('btn-camera').addEventListener('click', () => {
-    setCamMode(camMode === 'chase' ? 'far' : 'chase');
+    cycleCamMode();
   });
   document.getElementById('btn-restart').addEventListener('click', () => {
     if (screen === 'play' || screen === 'paused' || screen === 'results') startGame(mission.id);
@@ -387,7 +415,7 @@ function wireButtons() {
     setSound(!soundOn);
   });
   document.getElementById('pause-camera').addEventListener('click', () => {
-    setCamMode(camMode === 'chase' ? 'far' : 'chase');
+    cycleCamMode();
   });
   document.getElementById('pause-controls').addEventListener('click', () => showControls('pause'));
   document.getElementById('pause-quit').addEventListener('click', () => showTitle());
@@ -415,11 +443,22 @@ function runShot(name) {
   // The dossier frame is gameplay, not a menu: hide every overlay, or the
   // screenshot shows a menu over the 3D scene.
   hideOverlays();
+  // Stage F: the plane's quaternion must be current BEFORE the camera reads it —
+  // the cockpit camera copies the plane's orientation, and staging only advanced
+  // the flight state, not the mesh.
+  plane.update(flight);
   // The cover looks at the volcano from ~3 km out: pull the camera back so the
   // whole mountain fits instead of filling the frame as a brown wall.
-  camMode = name === 'cover' ? 'far' : 'chase';
+  setCamMode(name === 'cover' ? 'far' : name.startsWith('cockpit') ? 'cockpit' : 'chase');
   updateCamera(1);
-  plane.update(flight);
+  if (name === 'exterior') {
+    // Walkaround: a parked plane, three-quarter FRONT view, close enough to read
+    // the new fuselage skin, decals, nav lights and wheel pants. The nose points
+    // north (-z), so the camera stands north-east of the plane — the old spot
+    // (z +9) was behind the tail and showed the rear, not the front.
+    camera.position.set(flight.x + 9, flight.y + 2.5, flight.z - 9);
+    camera.lookAt(flight.x, flight.y + 0.5, flight.z);
+  }
   rings.update(0);
   // The rings shot stops just before the second ring, after banking the first:
   // show the toast for the ring just passed, or the frame has no score story.
@@ -432,6 +471,10 @@ function runShot(name) {
       rings: rings.rings, nextRing: rings.nextIndex(),
       frontX: stormWall.position.x, storm: mission.id === 'storm',
     });
+    // Stage F: force-draw the cockpit panel on the first paint so a cockpit
+    // screenshot never catches a blank panel (the live loop redraws it every
+    // fifth frame instead).
+    cockpit.update(flight, { pitch: 0, roll: 0, yaw: 0 }, 0, true);
     renderer.render(scene, camera);
     painted += 1;
     if (painted < 2) requestAnimationFrame(paint);
@@ -453,6 +496,9 @@ function runGame() {
   let accumulator = 0;
   let last = performance.now();
   let elapsed = 0;
+  // The last steering vector the loop used — the cockpit's yoke and pedals
+  // follow the stick, so they need it even when the autopilot is flying.
+  let lastInp = { pitch: 0, roll: 0, yaw: 0, throttleUp: false, throttleDown: false };
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -467,6 +513,7 @@ function runGame() {
         const inp = autopilotOn
           ? autopilotInput(flight, rings.nextIndex() >= 0 ? rings.rings[rings.nextIndex()] : { x: flight.x + 200, y: flight.y, z: flight.z }, 72)
           : input.read();
+        lastInp = inp;
         const events = sim.step(STEP, inp);
         if (events & EVENT_CRASHED) {
           audio.crash();
@@ -500,6 +547,7 @@ function runGame() {
       audio.engine(flight.throttle, !flight.onGround);
     }
     plane.update(flight);
+    if (screen === 'play') cockpit.update(flight, lastInp, 1 / 60);
     hud.update(flight, mission, mission.timeLeft, {
       rings: rings.rings, nextRing: rings.nextIndex(),
       frontX: stormWall.position.x, storm: mission.id === 'storm',
@@ -526,6 +574,19 @@ function runGame() {
 window.__game = {
   get mode() {
     return screen;
+  },
+  get camMode() {
+    return camMode;
+  },
+  setCamera(mode) {
+    setCamMode(mode);
+  },
+  cycleCamera() {
+    cycleCamMode();
+  },
+  /** The cockpit's live gauge values, for the driver to prove the needles move. */
+  get cockpitGauges() {
+    return { ...cockpit.gauges };
   },
   get flight() {
     return flight;

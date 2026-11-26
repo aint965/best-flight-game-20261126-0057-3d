@@ -173,9 +173,11 @@ export function stageShot(sim, name) {
     }
     return flown;
   }
-  if (name === 'rings') {
+  if (name === 'rings' || name === 'cockpit-cruise') {
     // Ring Run, stopped just before the second ring with the first one banked:
     // the plane is lined up and level, the gold hoop fills the frame ahead.
+    // The cockpit-cruise shot stages the same moment — the driver just asks
+    // main.js to paint it from the pilot's seat instead of the chase camera.
     sim.reset(homeSpawn(), 'rings');
     const rings = sim.rings;
     let flown = 0;
@@ -193,7 +195,7 @@ export function stageShot(sim, name) {
     }
     return flown;
   }
-  if (name === 'landing') {
+  if (name === 'landing' || name === 'cockpit-approach') {
     // Home landing, stopped on short final: the plane is ~400 m out and low, flying
     // 35 m WEST of the centreline (was 60 m) so the "36" at the near threshold reads
     // big beside the plane — comfortably inside the frame, not hugging the right
@@ -201,6 +203,7 @@ export function stageShot(sim, name) {
     // a winding band instead of a blob at the camera.
     // Stage C: closer than Stage B (420 m), bigger numbers (34 m), and the rings are
     // hidden for this shot — one drifted into the frame behind the mission card.
+    // The cockpit-approach shot stages the same final — painted from the seat.
     sim.reset({ x: -35, y: 80, z: 900, heading: 0, speed: 26, throttle: 42 }, 'rings');
     sim.rings.setVisible(false);
     let flown = 0;
@@ -212,9 +215,33 @@ export function stageShot(sim, name) {
     }
     return flown;
   }
+  if (name === 'lighthouse') {
+    // Fly-by past the coastal lighthouse: the plane 250 m west of the tower at
+    // 60 m, heading east — the chase camera puts the white tower, its rock plinth
+    // and the sea around it centre-frame, with Karang's shore behind it. The
+    // tower top is ~41 m, the plane clears it by ~19 m. The flight path runs
+    // 30 m SOUTH of the tower's latitude (z -280, not -250), so the tower sits
+    // BESIDE the plane in frame instead of hiding behind it.
+    sim.reset({ x: 1250, y: 60, z: -280, heading: 1.57, speed: 30, throttle: 60 }, 'rings');
+    sim.rings.setVisible(false);
+    let flown = 0;
+    for (let t = 0; t < 3; t += STEP) {
+      sim.step(STEP, autopilotInput(sim.flight, { x: 1500, y: 60, z: -280 }, 60));
+      flown += STEP;
+      if (sim.flight.crashed) break;
+    }
+    return flown;
+  }
+  if (name === 'exterior') {
+    // Walkaround: the plane parked on the home strip, engine idling. main.js
+    // places the camera three-quarter front, close enough to read the skin.
+    sim.reset(homeSpawn(), 'rings');
+    return 0;
+  }
   // cover: far west of home, flying east at the last ring with the volcano behind it.
-  // The plane starts ~3 km from the volcano so the whole mountain — slopes, crater,
-  // lighthouse — fits in frame as the hero, instead of filling it as a brown wall.
+  // The plane starts ~3 km from the volcano so the whole mountain — slopes, crater —
+  // fits in frame as the hero, instead of filling it as a brown wall, with the
+  // lighthouse on Karang's south tip sitting low mid-frame below the ring.
   // It starts near the ring's altitude so the flight is level, not a dive.
   sim.reset({ x: 600, y: 140, z: -200, heading: 1.57, speed: 34, throttle: 72 }, 'rings');
   const rings = sim.rings;

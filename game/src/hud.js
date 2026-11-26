@@ -155,7 +155,7 @@ function buildMapBase(w, h, islands) {
     ctx.fillStyle = '#f2f2e8';
     ctx.fillText(runway.numbers[0], nx, ny);
   }
-  // The volcano: a red peak marker; the lighthouse: a white dot on its west shoulder.
+  // The volcano: a red peak marker; the lighthouse: a white dot on Karang's south tip.
   const [vx, vy] = toMap(volcano.x, volcano.z);
   ctx.fillStyle = '#c23b2a';
   ctx.beginPath();

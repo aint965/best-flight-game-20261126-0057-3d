@@ -23,6 +23,26 @@
 // overlay, and a results screen with the score breakdown (rings, landings, time
 // bonus) and run stats. Sound and camera each have one source of truth, so the HUD
 // button, the title button and the pause menu can never disagree.
+// Stage F, second pass (2026-11-26, user: "Mercusuar di atas gunung tidak
+// realistis" + "Kontras warna pohon sama tanahnya gk sesuai" + "Suasananya buat
+// siang coba"): the lighthouse moves off the volcano to the south tip of Pulau
+// Karang (1500, -250) — a 32 m coastal tower on a rock plinth at sea level, beam
+// sweeping the strait — and the volcano stands bare (crater + ash cap + strata);
+// the whole atmosphere changes from sunset to midday (high white sun, blue sky,
+// pale-blue fog, bright sea, white clouds, short shadows); and the pines, bushes
+// and grass are re-tuned into one daylight family (yellow-green hue ~0.29,
+// saturation ~0.42) so the trees sit in the ground instead of floating on it.
+// The sunset version stays safe in git (commit eab0844) if the user prefers it.
+// The same pass also fixed the cockpit VIEW, which a screenshot review caught:
+// the wing sat so low over the cabin (y 1.05, the eye at 0.75) that its red front
+// face filled the middle of the windshield, and the headliner (y 0.98) filled the
+// top third with a black slab — the pilot saw almost no world ahead. A CDP probe
+// that hid one mesh at a time proved it (wing off: red gone; headliner off: black
+// gone). The wing now sits high (y 1.32, longer struts), the headliner is higher
+// and shorter, and the windshield frame is taller — the leading edge reads at the
+// TOP of the windshield, the way a real high-wing does, and the horizon opens up
+// below it. The exterior walkaround camera was also fixed: it stood behind the
+// tail (z +9) and showed the rear; it now stands three-quarter front (z -9).
 // This program copies game/ and screenshots/ from beside this file to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 // The copy is byte for byte the same on every run: no timestamps, no randomness here.
