@@ -55,7 +55,9 @@ export const PALETTE = {
   skyHorizon: '#ff9a3c',
   sun: '#ffd9a0',
   fog: '#f7a56a',
-  sea: '#2a7d9e',
+  sea: '#1a5f7d', // Stage D: the deep blue again — the mid blue went pale grey-blue
+  // under the sun path + fill light + fog in the cover frame; glitter stays bright
+  // only along the path, the rest of the sea reads deep.
   seaDeep: '#1a5f7d',
   sand: '#e8d29a',
   grassA: '#5d8a4a',

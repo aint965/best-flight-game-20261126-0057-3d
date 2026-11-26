@@ -249,6 +249,14 @@ function wireButtons() {
 
 function runShot(name) {
   stageShot(sim, name);
+  // Stage D: the two-pass hop staging runs the approach to a landing in its first
+  // pass, and its "Landed" toast survives into the frame (the toast hides on a
+  // 2.6 s timer, but the screenshot is taken sooner). Clear it here — the rings
+  // shot re-toasts its own score line below.
+  hud.hideToast();
+  // Stage D: log the staged state so the driver output shows what the frame is —
+  // plane position, bank and score — instead of only the file size.
+  console.info(`[shot] ${name} staged — plane at (${sim.flight.x.toFixed(0)}, ${sim.flight.y.toFixed(0)}, ${sim.flight.z.toFixed(0)}), bank ${sim.flight.bank.toFixed(2)}, heading ${(sim.flight.heading * 180 / Math.PI).toFixed(0)}°, score ${sim.flight.score}`);
   screen = 'play';
   // The dossier frame is gameplay, not the title screen: hide the title and end
   // overlays, or the screenshot shows a menu over the 3D scene.

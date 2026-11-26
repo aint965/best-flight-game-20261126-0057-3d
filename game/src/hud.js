@@ -158,6 +158,14 @@ export function createHud(islands) {
     refs.banner.classList.add('show');
   }
 
+  function hideToast() {
+    refs.toast.classList.remove('show');
+    if (toastTimer) {
+      clearTimeout(toastTimer);
+      toastTimer = null;
+    }
+  }
+
   function fmtTime(seconds) {
     const s = Math.max(0, Math.floor(seconds));
     return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -165,6 +173,7 @@ export function createHud(islands) {
 
   return {
     toast,
+    hideToast,
     banner,
     hideBanner() {
       refs.banner.classList.remove('show');

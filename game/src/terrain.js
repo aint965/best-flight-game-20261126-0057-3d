@@ -177,6 +177,38 @@ function buildSky(scene) {
   scene.fog = new THREE.Fog(0xf7a56a, 1800, 9500);
 }
 
+/** A seeded speckle canvas, tiled over the terrain so close ground has grain: the
+ *  terrain mesh is one vertex per ~61 m, so vertex colours alone interpolate into a
+ *  flat olive field in the foreground. The texture is near-white (0.78–1.08) so it
+ *  only adds grain, never a new hue. Stage D. */
+function speckleTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const rng = createRandom(SEED + 41);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 9000; i += 1) {
+    const g = Math.floor(255 * rng.range(0.78, 1.08));
+    ctx.fillStyle = `rgb(${g},${g},${g})`;
+    const s = rng.next() < 0.85 ? 1 : 2;
+    ctx.fillRect(Math.floor(rng.next() * 256), Math.floor(rng.next() * 256), s, s);
+  }
+  for (let i = 0; i < 60; i += 1) {
+    const v = rng.range(0.85, 1.0);
+    ctx.fillStyle = `rgba(${Math.floor(255 * v)},${Math.floor(255 * v)},${Math.floor(255 * v)},0.5)`;
+    ctx.beginPath();
+    ctx.arc(rng.next() * 256, rng.next() * 256, rng.range(4, 12), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(230, 167); // one tile ≈ 48 m
+  return tex;
+}
+
 function buildTerrainMesh(scene) {
   const geo = new THREE.PlaneGeometry(11000, 8000, 180, 130);
   geo.rotateX(-Math.PI / 2);
@@ -246,7 +278,7 @@ function buildTerrainMesh(scene) {
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, map: speckleTexture() }));
   mesh.position.set(TERRAIN_CENTER.x, 0, TERRAIN_CENTER.z);
   scene.add(mesh);
 }
@@ -260,31 +292,50 @@ function buildSea(scene, rng) {
   sea.position.set(TERRAIN_CENTER.x, 0.15, TERRAIN_CENTER.z);
   scene.add(sea);
 
-  // Sun glitter: a band of bright quads on the water toward the setting sun, big
-  // enough to read at a kilometre (the Stage A quads were sub-pixel and invisible).
-  // Stage C adds a dense glitter BAND along the sun's line (z ≈ -150, running east
-  // from the sunset toward the volcano), so the cover frame — which looks east,
-  // away from the sun — still shows a glitter path on the sea leading to the hero.
+  // Sun glitter: bright quads on the water, elongated ALONG the sun's line (east-
+  // west) so they read as streaks, not planks — and dimmed per quad so the band
+  // fades with distance from the path centreline and from the sun in the west.
+  // Stage D: the scattered quads are much smaller and fewer (the Stage C ones read
+  // as white confetti in the cover foreground), the band is a bright core line with
+  // a softer halo, and the colour is per-quad (additive blending: dimmer colour =
+  // dimmer glitter).
   const glitterMat = new THREE.MeshBasicMaterial({
-    color: 0xffe9b0, transparent: true, opacity: 0.7,
+    vertexColors: true, transparent: true, opacity: 0.75,
     blending: THREE.AdditiveBlending, depthWrite: false,
   });
   const quads = [];
-  for (let i = 0; i < 420; i += 1) {
-    const g = new THREE.PlaneGeometry(rng.range(14, 34), rng.range(3, 7));
+  const warm = new THREE.Color(0xffe9b0);
+  for (let i = 0; i < 120; i += 1) {
+    // Sparse sparkle away from the path: small, dim, never a plank.
+    const g = new THREE.PlaneGeometry(rng.range(4, 8), rng.range(1, 2));
     const m = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
     m.setPosition(rng.range(-5200, 2200), 0.3, rng.range(-2600, 2200));
-    quads.push({ geometry: g, matrix: m });
+    const col = warm.clone().multiplyScalar(rng.range(0.25, 0.5));
+    quads.push({ geometry: g, matrix: m, color: col });
   }
-  for (let i = 0; i < 200; i += 1) {
-    // Stage C, second pass: 10-20 m long and 2-4 m wide — the first pass used
-    // 18-44 m quads and they read as white planks scattered on the water.
-    const g = new THREE.PlaneGeometry(rng.range(10, 20), rng.range(2, 4));
+  for (let i = 0; i < 220; i += 1) {
+    // The band core: long thin streaks along the path, brightest toward the sun.
+    const x = rng.range(-800, 4200);
+    const z = -150 + rng.range(-110, 110);
+    const g = new THREE.PlaneGeometry(rng.range(14, 30), rng.range(1, 2));
     const m = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
-    m.setPosition(rng.range(-500, 3800), 0.32, -150 + rng.range(-200, 200));
-    quads.push({ geometry: g, matrix: m });
+    m.setPosition(x, 0.32, z);
+    const fadeZ = 1 - Math.min(1, Math.abs(z + 150) / 110) * 0.7;
+    const fadeX = 1 - Math.min(1, Math.max(0, x - 800) / 3400) * 0.75;
+    const col = warm.clone().multiplyScalar(0.95 * fadeZ * fadeX);
+    quads.push({ geometry: g, matrix: m, color: col });
   }
-  const glitter = new THREE.Mesh(mergeParts(quads), glitterMat);
+  for (let i = 0; i < 140; i += 1) {
+    // The halo: shorter, dimmer streaks just off the core line.
+    const x = rng.range(-800, 3600);
+    const z = -150 + (rng.next() < 0.5 ? -1 : 1) * rng.range(110, 220);
+    const g = new THREE.PlaneGeometry(rng.range(8, 18), rng.range(1, 2));
+    const m = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+    m.setPosition(x, 0.31, z);
+    const col = warm.clone().multiplyScalar(rng.range(0.2, 0.45));
+    quads.push({ geometry: g, matrix: m, color: col });
+  }
+  const glitter = new THREE.Mesh(mergePartsColor(quads), glitterMat);
   scene.add(glitter);
 
   // The sun path: one long soft streak of warm light on the water, brightest toward
@@ -314,7 +365,7 @@ function buildSea(scene, rng) {
   const path = new THREE.Mesh(
     new THREE.PlaneGeometry(9100, 1400),
     new THREE.MeshBasicMaterial({
-      map: new THREE.CanvasTexture(canvas), transparent: true, opacity: 0.7,
+      map: new THREE.CanvasTexture(canvas), transparent: true, opacity: 0.55,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }),
   );
@@ -522,6 +573,87 @@ function buildTrees(scene, rng) {
   scene.add(cones2);
 }
 
+/** Near-camera ground detail: bushes, rocks and flower dots on the two low islands,
+ *  denser where the dossier frames look (south of the home strip, south-west of
+ *  Karang) — the vertex-coloured ground is one vertex per ~61 m, so close grass reads
+ *  flat without something sitting on it. Visual only: the sim never sees this. */
+function buildDetail(scene, rng) {
+  const zones = [
+    // [x0, x1, z0, z1, bushes, rocks, flowers]
+    [-500, 500, 150, 950, 90, 30, 110], // home south foreground (landing frame)
+    [850, 1750, -650, -200, 70, 25, 80], // Karang south-west foreground (hop frame)
+    [-900, 900, -900, 900, 60, 20, 60], // home island general
+    [900, 2100, -1500, -300, 50, 15, 50], // Karang general
+  ];
+  const bushes = [];
+  const rocks = [];
+  const flowers = [];
+  for (const [x0, x1, z0, z1, nb, nr, nf] of zones) {
+    let guard = 0;
+    let placed = 0;
+    while (placed < nb + nr + nf && guard < 6000) {
+      guard += 1;
+      const x = rng.range(x0, x1);
+      const z = rng.range(z0, z1);
+      const h = groundAt(x, z);
+      if (h < 3 || h > 42) continue;
+      if (onRunwayPlateau(x, z)) continue;
+      if (distToRiver(x, z) < 18) continue;
+      if (placed < nb) bushes.push([x, h, z, rng.range(0.8, 1.6)]);
+      else if (placed < nb + nr) rocks.push([x, h, z, rng.range(0.6, 1.4)]);
+      else flowers.push([x, h, z, rng.range(0.7, 1.3)]);
+      placed += 1;
+    }
+  }
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const s = new THREE.Vector3();
+  const p = new THREE.Vector3();
+  const col = new THREE.Color();
+  const bushGeo = new THREE.IcosahedronGeometry(1.6, 0);
+  const bushMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const bushMesh = new THREE.InstancedMesh(bushGeo, bushMat, bushes.length);
+  bushes.forEach(([x, h, z, scale], i) => {
+    s.set(scale, scale * 0.7, scale);
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rng.next() * Math.PI * 2);
+    p.set(x, h + 0.8 * scale, z);
+    m.compose(p, q, s);
+    bushMesh.setMatrixAt(i, m);
+    col.setHSL(0.29 + rng.next() * 0.05, 0.5, 0.22 + rng.next() * 0.1);
+    bushMesh.setColorAt(i, col);
+  });
+  const rockGeo = new THREE.DodecahedronGeometry(1.1, 0);
+  const rockMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const rockMesh = new THREE.InstancedMesh(rockGeo, rockMat, rocks.length);
+  rocks.forEach(([x, h, z, scale], i) => {
+    s.set(scale, scale * 0.7, scale);
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rng.next() * Math.PI * 2);
+    p.set(x, h + 0.4 * scale, z);
+    m.compose(p, q, s);
+    rockMesh.setMatrixAt(i, m);
+    col.setHSL(0.08, 0.08, 0.45 + rng.next() * 0.2);
+    rockMesh.setColorAt(i, col);
+  });
+  const flowerGeo = new THREE.SphereGeometry(0.5, 6, 5);
+  const flowerMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const flowerMesh = new THREE.InstancedMesh(flowerGeo, flowerMat, flowers.length);
+  const petal = [0xf2d13c, 0xf4ede0, 0xe87a9e, 0xff8c42];
+  flowers.forEach(([x, h, z, scale], i) => {
+    s.set(scale, scale, scale);
+    q.identity();
+    p.set(x, h + 0.45 * scale, z);
+    m.compose(p, q, s);
+    flowerMesh.setMatrixAt(i, m);
+    col.setHex(petal[i % petal.length]);
+    flowerMesh.setColorAt(i, col);
+  });
+  for (const mesh of [bushMesh, rockMesh, flowerMesh]) {
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    scene.add(mesh);
+  }
+}
+
 function buildVolcanoDetails(scene) {
   const v = ISLANDS[2];
   const crater = new THREE.Mesh(
@@ -533,62 +665,73 @@ function buildVolcanoDetails(scene) {
   scene.add(crater);
 
   // The lighthouse on the volcano's WEST shoulder, facing the cover camera and the
-  // incoming plane: a 60 m tower, white with two red bands, a red roof and a big warm
-  // lamp, on a white terrace with the keeper's cottage beside it. Stage B's 24 m tower
-  // on the north shoulder read as a single pink glow dot from 3 km — this one is tall
-  // enough, wide enough and bright enough to read as a tower, not a dot.
-  const lx = v.x - 550;
-  const lz = v.z - 100;
+  // incoming plane. Stage D: 120 m tall and 30 m wide, moved 350 m further west
+  // (to 3200, -120) — the Stage C tower was 60 m and read as ~14 px from the cover
+  // camera; at ~2.6 km a 120 m tower reads ~30 px, a tower, not a dot. A short
+  // faint beam points west toward the incoming plane.
+  const lx = v.x - 700;
+  const lz = v.z - 120;
   const gy = groundAt(lx, lz);
   const house = new THREE.Group();
   house.position.set(lx, gy, lz);
   const skirt = new THREE.Mesh(
-    new THREE.CylinderGeometry(18, 19, 6, 10),
+    new THREE.CylinderGeometry(22, 24, 7, 10),
     new THREE.MeshLambertMaterial({ color: 0xf4ede0 }),
   );
-  skirt.position.y = 3;
+  skirt.position.y = 3.5;
   house.add(skirt);
   const tower = new THREE.Mesh(
-    // Second pass: 24 m wide at the base, not 14 — the 60 m tower was tall enough
-    // but only ~3 px wide from the cover camera, so it still read as a dot.
-    new THREE.CylinderGeometry(9, 12, 60, 10),
+    new THREE.CylinderGeometry(12, 15, 120, 10),
     new THREE.MeshLambertMaterial({ color: 0xf4ede0 }),
   );
-  tower.position.y = 30;
+  tower.position.y = 60;
   house.add(tower);
-  for (const by of [18, 42]) {
+  for (const by of [36, 84]) {
     const band = new THREE.Mesh(
-      new THREE.CylinderGeometry(12.5, 12.5, 4, 10),
+      new THREE.CylinderGeometry(15.5, 15.5, 5, 10),
       new THREE.MeshLambertMaterial({ color: 0xc23b2a }),
     );
     band.position.y = by;
     house.add(band);
   }
   const lamp = new THREE.Mesh(
-    new THREE.SphereGeometry(5, 10, 8),
+    new THREE.SphereGeometry(6, 10, 8),
     new THREE.MeshBasicMaterial({ color: 0xffe9a0 }),
   );
-  lamp.position.y = 62;
+  lamp.position.y = 122;
   house.add(lamp);
   const roof = new THREE.Mesh(
-    new THREE.ConeGeometry(12, 6, 10),
+    new THREE.ConeGeometry(15, 8, 10),
     new THREE.MeshLambertMaterial({ color: 0xc23b2a }),
   );
-  roof.position.y = 68;
+  roof.position.y = 128;
   house.add(roof);
   const cottage = new THREE.Mesh(
-    new THREE.BoxGeometry(9, 5, 7),
+    new THREE.BoxGeometry(11, 6, 8),
     new THREE.MeshLambertMaterial({ color: 0xf4ede0 }),
   );
-  cottage.position.set(12, 2.5, 5);
+  cottage.position.set(15, 3, 6);
   house.add(cottage);
   const cottageRoof = new THREE.Mesh(
-    new THREE.ConeGeometry(6.5, 3.5, 4),
+    new THREE.ConeGeometry(8, 4.5, 4),
     new THREE.MeshLambertMaterial({ color: 0xc23b2a }),
   );
-  cottageRoof.position.set(12, 6.7, 5);
+  cottageRoof.position.set(15, 8.2, 6);
   cottageRoof.rotation.y = Math.PI / 4;
   house.add(cottageRoof);
+  // A short faint beam, widening west toward the incoming plane: apex at the lamp,
+  // base 350 m out. ConeGeometry's apex is at +Y/2, so rotate -90° about Z to lay
+  // the axis along X with the apex east, then centre it half its length west.
+  const beam = new THREE.Mesh(
+    new THREE.ConeGeometry(42, 350, 12, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0xffe9a0, transparent: true, opacity: 0.12,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
+    }),
+  );
+  beam.rotation.z = -Math.PI / 2;
+  beam.position.set(-175, 122, 0);
+  house.add(beam);
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
@@ -601,10 +744,43 @@ function buildVolcanoDetails(scene) {
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
     map: new THREE.CanvasTexture(canvas), blending: THREE.AdditiveBlending, depthWrite: false,
   }));
-  glow.position.y = 62;
-  glow.scale.set(130, 130, 1);
+  glow.position.y = 122;
+  glow.scale.set(200, 200, 1);
   house.add(glow);
   scene.add(house);
+}
+
+/** True when a cloud centre would sit in front of the volcano hero or the
+ *  lighthouse in one of the two frames that show them — the cover (camera ~790 m
+ *  east of home, looking east at the volcano) or the rings shot (camera looking
+ *  south-east at the lighthouse on the volcano's west shoulder). Stage D added
+ *  bigger clouds and one landed right over the mountain in both frames, hiding the
+ *  hero and the lighthouse it was meant to show. */
+function blocksHero(cx, cy, cz) {
+  // Cover cone: from (790, 140, -200), axis east. The volcano's angular box from
+  // there is roughly ha -15°..+22°, va -3°..+9°; the margins allow for cloud size.
+  const dx = cx - 790;
+  const dy = cy - 140;
+  const dz = cz + 200;
+  if (dx > 300 && dx < 3600) {
+    const ha = Math.atan2(dz, dx);
+    const va = Math.atan2(dy, dx);
+    if (ha > -0.38 && ha < 0.45 && va > -0.10 && va < 0.28) return true;
+  }
+  // Rings-shot cone: from (428, 118, -343) toward the lighthouse (3200, 300, -120).
+  const vx = cx - 428;
+  const vy = cy - 118;
+  const vz = cz + 343;
+  const ax = 2772;
+  const ay = 182;
+  const az = 223;
+  const vLen = Math.sqrt(vx * vx + vy * vy + vz * vz);
+  const aLen = Math.sqrt(ax * ax + ay * ay + az * az);
+  if (vLen > 100 && vLen < 2850) {
+    const cos = (vx * ax + vy * ay + vz * az) / (vLen * aLen);
+    if (cos > 0.9945) return true; // within ~6° of the lighthouse sightline
+  }
+  return false;
 }
 
 function buildClouds(scene, rng) {
@@ -615,6 +791,10 @@ function buildClouds(scene, rng) {
   // never goes black on its shadow side (Stage B's shot 4 showed clouds as dark
   // blobs). Five hero clouds sit at fixed spots — three in the north-east sky the
   // Island Hop frame looks at (it was empty), two over the western sea.
+  // Stage D: 9–13 puffs per cluster (was 6–9), 1–3 towers, a per-cluster size scale
+  // for shape variety, 10-puff heroes — plus soft cloud shadows on the sea and the
+  // flat home plateau, offset east (the sun is low in the west, so real shadows at
+  // sunset are long; a fixed offset reads as a shadow without leaving the frame).
   const cBase = new THREE.Color(0xc9cedb);
   const cMid = new THREE.Color(0xe8ebf2);
   const cTop = new THREE.Color(0xffffff);
@@ -624,18 +804,19 @@ function buildClouds(scene, rng) {
   });
   function cluster(cx, cy, cz, puffs) {
     const parts = [];
-    const towers = rng.next() < 0.5 ? 2 : 1;
+    const scale = rng.range(0.7, 1.4);
+    const towers = 1 + Math.floor(rng.next() * 3);
     for (let i = 0; i < puffs; i += 1) {
       const tower = i < towers;
       const g = new THREE.SphereGeometry(1, 10, 8);
       const m = new THREE.Matrix4();
-      const sx = tower ? rng.range(40, 62) : rng.range(55, 115);
-      const sy = tower ? rng.range(36, 55) : rng.range(22, 42);
-      const sz = tower ? rng.range(35, 52) : rng.range(38, 68);
+      const sx = (tower ? rng.range(40, 62) : rng.range(55, 115)) * scale;
+      const sy = (tower ? rng.range(36, 55) : rng.range(22, 42)) * scale;
+      const sz = (tower ? rng.range(35, 52) : rng.range(38, 68)) * scale;
       m.makeScale(sx, sy, sz);
-      const px = cx + rng.range(-80, 80);
+      const px = cx + rng.range(-80, 80) * scale;
       const py = cy + (tower ? rng.range(14, 30) : rng.range(-12, 12));
-      const pz = cz + rng.range(-55, 55);
+      const pz = cz + rng.range(-55, 55) * scale;
       m.setPosition(px, py, pz);
       const t = tower ? 1 : clamp((py - (cy - 14)) / 34, 0, 1);
       const col = new THREE.Color().copy(cBase).lerp(cMid, t);
@@ -644,20 +825,67 @@ function buildClouds(scene, rng) {
     }
     return new THREE.Mesh(mergePartsColor(parts), mat);
   }
-  const clusters = 16;
+  const clusters = 18;
+  const shadowSpots = [];
   for (let c = 0; c < clusters; c += 1) {
-    const cx = rng.range(-3200, 5600);
-    const cz = rng.range(-3200, 2600);
-    const cy = c < 5 ? rng.range(140, 210) : rng.range(280, 540);
-    const puffs = 6 + Math.floor(rng.next() * 4);
+    // Re-roll a centre that would hide the volcano hero or the lighthouse (see
+    // blocksHero); at most 8 tries, then accept it — a cloud is better than a hang.
+    let cx;
+    let cy;
+    let cz;
+    let guard = 0;
+    do {
+      cx = rng.range(-3200, 5600);
+      cz = rng.range(-3200, 2600);
+      cy = c < 5 ? rng.range(140, 210) : rng.range(280, 540);
+      guard += 1;
+    } while (guard < 8 && blocksHero(cx, cy, cz));
+    const puffs = 9 + Math.floor(rng.next() * 5);
     scene.add(cluster(cx, cy, cz, puffs));
+    if (shadowSpots.length < 9 && groundAt(cx, cz) < 0.5) shadowSpots.push([cx, cy, cz]);
   }
   // Hero clouds at fixed spots, so the frames that need sky always have it.
   const heroes = [
     [2600, 320, -1200], [3400, 390, -800], [4200, 300, -1500],
     [-1800, 300, -600], [-2400, 390, 800],
   ];
-  for (const [hx, hy, hz] of heroes) scene.add(cluster(hx, hy, hz, 7));
+  for (const [hx, hy, hz] of heroes) scene.add(cluster(hx, hy, hz, 10));
+
+  // Cloud shadows: soft dark ellipses on the flat sea (and, where the ground is a
+  // flat plateau, on land) — a radial-gradient texture, so the edge fades instead of
+  // cutting a hard disc. Static, like the clouds themselves.
+  const shadowCanvas = document.createElement('canvas');
+  shadowCanvas.width = 128;
+  shadowCanvas.height = 128;
+  const sctx = shadowCanvas.getContext('2d');
+  const sgrad = sctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  sgrad.addColorStop(0, 'rgba(10, 20, 30, 0.55)');
+  sgrad.addColorStop(0.6, 'rgba(10, 20, 30, 0.25)');
+  sgrad.addColorStop(1, 'rgba(10, 20, 30, 0)');
+  sctx.fillStyle = sgrad;
+  sctx.fillRect(0, 0, 128, 128);
+  const shadowTex = new THREE.CanvasTexture(shadowCanvas);
+  const shadowMat = new THREE.MeshBasicMaterial({
+    map: shadowTex, transparent: true, opacity: 0.3, depthWrite: false,
+  });
+  for (const [sx, sy, sz] of shadowSpots) {
+    const sh = new THREE.Mesh(new THREE.CircleGeometry(1, 24), shadowMat);
+    sh.rotation.x = -Math.PI / 2;
+    const w = rng.range(180, 320);
+    sh.scale.set(w, w * rng.range(0.55, 0.75), 1);
+    // East and a little south of the cloud, as a low western sun throws it.
+    sh.position.set(sx + sy * 1.5, 0.6, sz + sy * 0.5);
+    scene.add(sh);
+  }
+  // Two shadows on the flat home plateau, where the ground is level enough that a
+  // flat ellipse cannot clip into a slope.
+  for (const [px, pz] of [[-350, 550], [420, 650]]) {
+    const sh = new THREE.Mesh(new THREE.CircleGeometry(1, 24), shadowMat);
+    sh.rotation.x = -Math.PI / 2;
+    sh.scale.set(240, 150, 1);
+    sh.position.set(px, groundAt(px, pz) + 1.5, pz);
+    scene.add(sh);
+  }
 }
 
 /** The storm front: a ragged wall of dark cloud closing in from the east. The loop
@@ -696,6 +924,7 @@ export function buildWorld(scene) {
   buildRiver(scene);
   buildRunways(scene);
   buildTrees(scene, rng);
+  buildDetail(scene, rng);
   buildVolcanoDetails(scene);
   buildClouds(scene, rng);
   const stormWall = buildStormWall(scene, rng);

@@ -2,11 +2,15 @@
 // The game is this directory's game/ folder: plain static files a desktop browser loads offline
 // (game/index.html and its ES modules, Three.js vendored under game/vendor/, no network request).
 // Three missions — Ring Run, Island Hop, Storm Courier — all proven completable in the
-// Node simulation (flight3d-sim-b.mjs) and captured in the 4-shot dossier below.
-// Stage C polish (2026-11-26): a 60 m lighthouse that reads as a tower from 3 km, a sun
-// glitter path that crosses the cover frame's sea, bigger 34 m runway numbers, a camera
-// fill light so the plane never reads as a black silhouette, taller layered clouds, and
-// a narrower winding river with a highlight ribbon.
+// Node simulation (flight3d-sim-d.mjs) and captured in the 4-shot dossier below.
+// Stage D polish (2026-11-26): textured foreground detail (bushes, rocks, flowers)
+// plus a grain texture on the terrain so close grass is not a flat field; a 120 m
+// lighthouse that reads as a tower from 3 km, with a short beam; finer sun glitter
+// that fades along the path instead of white confetti; a deeper sea; wings-level
+// final approach on the Island Hop shot; more cloud puffs with soft shadows. Stage D
+// also fixed the plane's yaw sign (rotation.y = -heading): the model had flown
+// tail-first on every heading but due north/south since Stage A — the nose dot the
+// flight direction measured 0.30 at 36° instead of 1.00.
 // This program copies game/ and screenshots/ from beside this file to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 // The copy is byte for byte the same on every run: no timestamps, no randomness here.

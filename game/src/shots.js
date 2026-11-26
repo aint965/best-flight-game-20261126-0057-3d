@@ -56,6 +56,14 @@ export function landingInput(flight, tx = 0, tz = 0) {
  *  out from the centre — the last straight-in fix before the glide. */
 const KARANG_APPROACH = { x: 1310, y: 80, z: -492 };
 const HOME_APPROACH = { x: 0, y: 80, z: 450 };
+const KARANG_HEADING = 0.4363323129985824; // the 03 strip's compass heading, radians
+
+function headingError(flight, target) {
+  let e = flight.heading - target;
+  while (e > Math.PI) e -= Math.PI * 2;
+  while (e < -Math.PI) e += Math.PI * 2;
+  return e;
+}
 
 function near2(flight, x, z, d) {
   return Math.hypot(flight.x - x, flight.z - z) < d;
@@ -120,14 +128,45 @@ export function createStormPilot(rings) {
  */
 export function stageShot(sim, name) {
   if (name === 'hop') {
-    // Island Hop, stopped on short final to Karang: the plane is ~350 m out, low,
-    // with the "03" at the near threshold big ahead of it.
+    // Island Hop, stopped on short final to Karang, WINGS LEVEL: the old break fired
+    // the moment the plane got within 380 m, while it was still banking out of the
+    // turn onto final. Stage D flies the approach twice (the staging is fully
+    // deterministic, same seed, same pilot): pass 1 finds the best-aligned moment on
+    // final — close, low, bank near zero, heading on the strip — and pass 2 re-flies
+    // to exactly that moment and stops. If no aligned moment is found, fall back to
+    // the old break so the shot still stages.
+    const K_HEADING = KARANG_HEADING;
+    let bestT = -1;
+    let bestScore = Infinity;
+    {
+      sim.reset(homeSpawn(), 'hop');
+      const pilot = createHopPilot();
+      for (let t = 0; t < 200; t += STEP) {
+        const f = sim.flight;
+        if (sim.mission.leg === 0) {
+          const d = Math.hypot(f.x - 1500, f.z + 900);
+          // Stage D, second pass: the window is 260–380 m out and 18–55 m up — the
+          // first pass used <380 m and picked a moment 161 m out, past the "03"
+          // numbers (they sit at the approach threshold) and nearly on the grass.
+          // The score also prefers the farther moment, so the numbers stay ahead
+          // of the plane, big in frame.
+          if (d >= 260 && d < 380 && f.y > 18 && f.y < 55) {
+            const s = Math.abs(f.bank) + 1.5 * Math.abs(headingError(f, K_HEADING)) + (380 - d) * 0.001;
+            if (s < bestScore) { bestScore = s; bestT = t; }
+          }
+        }
+        if (f.crashed || sim.mission.done) break;
+        sim.step(STEP, pilot(f, sim.mission));
+      }
+    }
     sim.reset(homeSpawn(), 'hop');
     const pilot = createHopPilot();
     let flown = 0;
-    for (let t = 0; t < 180; t += STEP) {
+    for (let t = 0; t < 200; t += STEP) {
       const f = sim.flight;
-      if (sim.mission.leg === 0 && near2(f, 1500, -900, 380) && f.y < 50) break;
+      if (bestT >= 0) {
+        if (t >= bestT) break;
+      } else if (sim.mission.leg === 0 && near2(f, 1500, -900, 380) && f.y < 50) break;
       sim.step(STEP, pilot(f, sim.mission));
       flown += STEP;
       if (f.crashed || sim.mission.done) break;
@@ -155,20 +194,21 @@ export function stageShot(sim, name) {
     return flown;
   }
   if (name === 'landing') {
-    // Home landing, stopped on short final: the plane is ~320 m out and low, flying
-    // 60 m WEST of the centreline so the "36" at the near threshold reads big beside
-    // the plane (not hidden behind it) and the river — now on the far side of the
-    // strip — crosses the frame as a winding band instead of a blob at the camera.
+    // Home landing, stopped on short final: the plane is ~400 m out and low, flying
+    // 35 m WEST of the centreline (was 60 m) so the "36" at the near threshold reads
+    // big beside the plane — comfortably inside the frame, not hugging the right
+    // edge — and the river — now on the far side of the strip — crosses the frame as
+    // a winding band instead of a blob at the camera.
     // Stage C: closer than Stage B (420 m), bigger numbers (34 m), and the rings are
     // hidden for this shot — one drifted into the frame behind the mission card.
-    sim.reset({ x: -60, y: 80, z: 900, heading: 0, speed: 26, throttle: 42 }, 'rings');
+    sim.reset({ x: -35, y: 80, z: 900, heading: 0, speed: 26, throttle: 42 }, 'rings');
     sim.rings.setVisible(false);
     let flown = 0;
     for (let t = 0; t < 45; t += STEP) {
       const f = sim.flight;
-      sim.step(STEP, landingInput(f, -60, 0));
+      sim.step(STEP, landingInput(f, -35, 0));
       flown += STEP;
-      if ((near2(f, -60, 0, 320) && f.y < 32) || f.landed || f.crashed) break;
+      if ((near2(f, -35, 0, 400) && f.y < 40) || f.landed || f.crashed) break;
     }
     return flown;
   }

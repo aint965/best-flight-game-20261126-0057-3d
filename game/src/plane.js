@@ -119,7 +119,15 @@ export function buildPlane(scene) {
     update(flight) {
       group.position.set(flight.x, flight.y, flight.z);
       group.rotation.order = 'YXZ';
-      group.rotation.y = flight.heading;
+      // Stage D: MINUS the heading. The flight moves in (sin h, 0, -cos h), but a
+      // model yawed by +h points its nose at (-sin h, 0, -cos h) — verified in Node,
+      // the nose dot the flight direction was 0.30 at h = 36° instead of 1.00. The
+      // plane has been flying tail-first on every heading but due north/south since
+      // Stage A: the chase camera saw the prop from the front, and the "banked"
+      // look in the Island Hop frame was the nose pointing the wrong way, not a
+      // bank at all (bank was 0.00 in the live state). Yaw -h puts the nose exactly
+      // on the flight direction; pitch and roll are unchanged by the flip.
+      group.rotation.y = -flight.heading;
       group.rotation.x = flight.pitch;
       group.rotation.z = -flight.bank;
       prop.rotation.z += flight.throttle * 0.02 + 0.12;
