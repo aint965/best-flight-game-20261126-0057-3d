@@ -2,7 +2,7 @@
 // The game is this directory's game/ folder: plain static files a desktop browser loads offline
 // (game/index.html and its ES modules, Three.js vendored under game/vendor/, no network request).
 // Three missions — Ring Run, Island Hop, Storm Courier — all proven completable in the
-// Node simulation (flight3d-sim-d.mjs) and captured in the 4-shot dossier below.
+// Node simulation (flight3d-sim-i2.mjs) and captured in the 4-shot dossier below.
 // Stage D polish (2026-11-26): textured foreground detail (bushes, rocks, flowers)
 // plus a grain texture on the terrain so close grass is not a flat field; a 120 m
 // lighthouse that reads as a tower from 3 km, with a short beam; finer sun glitter
@@ -137,6 +137,40 @@
 // plane (PK-LNI, same wingspan, same fuselage length) — silhouette and livery
 // only, so the flight model and the verified sim scores do not move, and the
 // sharper nose keeps the runway threshold visible from the cockpit on final.
+// Stage I-fix (2026-11-27, user: "Perbaiki lagi" + "Kaca bagian kotpit terlalu
+// kecil"): the cockpit glass is still a slit, and the Stage H diagnosis was
+// wrong — the khaki band over the top ~25% of the frame is NOT the headliner
+// (its front edge already sits at ~27° up, just inside the 28° frame top). It
+// is the WING's underside in shadow: the high wing spans from ~12.5° up to
+// overhead from the eye, so it fills the whole top of the frame. The wing
+// rises to 1.50 (struts, tips, flap/aileron lines, pitot, landing light and
+// nav lights ride with it), the windshield frame grows up with it (pillars
+// 1.30 tall at ±0.82, top bar 1.34), and the headliner moves back (front edge
+// z 0.09, ~35° up — above the frame top, so it can never appear in frame).
+// The glass grows from ~17° to ~21° of the 62° field and the wing band
+// shrinks from ~25% to ~18% of the frame; the 12 gauges and the short-final
+// threshold stay exactly as Stage H left them (lip untouched at 0.72, eye at
+// 0.85). The same round fixes three more Stage I leftovers: (2) the black
+// nose is too dominant — the cowling drum is red again with the charcoal kept
+// only as a brow shell over the top, the shark mouth grows (bigger jaw and
+// teeth in its canvas, quad 1.15 x 0.46) and the cheatline widens to 32 px
+// with a 6 px pinstripe, so the nose reads red with teeth instead of a black
+// block; (3) the dark diagonal wedge in the Stage I approach frame is the
+// prop blade — wings level in that staging, so it cannot be the wing; the
+// staged shots freeze the blades at one fixed ~55° diagonal, and at 0.55
+// opacity the blade strobed across the windshield. The blades drop to 0.15:
+// a real prop at flight RPM is a blur, and the blur disc does the spinning
+// read now. A new banked-approach shot stages the same final while still
+// turning onto it, to prove the wedge is gone in the condition that caught
+// it. (4) The Storm Courier sky is still bright midday blue — the front wall
+// was the only dark thing in the frame. The whole atmosphere now grades
+// per mission (setSkyMode in reset(), next to the lighthouse wiring): storm
+// mode darkens the sky shader to slate blue-grey, pulls the fog in closer
+// and greyer, dims the sun 2.5 -> 1.8 and the hemisphere fill, mutes the sun
+// glow sprite and deepens the sea; day mode restores every value exactly.
+// The beam and the lamp core are MeshBasic, so the grade cannot dim them —
+// the beam reads better against the dark sky. Same flight model, same sim
+// scores (2875/2345/2790), same lighthouse position and lamp rule.
 // This program copies game/ and screenshots/ from beside this file to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 // The copy is byte for byte the same on every run: no timestamps, no randomness here.
@@ -197,6 +231,24 @@ if (!mainJs.includes("lighthouseLight.setLight(missionId === 'storm')")) {
   throw new Error('main.ts: lighthouse light wiring missing from game/src/main.js');
 }
 console.log('lighthouse: per-mission light wiring present in game/src/main.js');
+
+// Stage I-fix: the storm grade is per-mission too — it must be wired in
+// reset() next to the lighthouse call, or the Storm Courier flies under a
+// bright midday sky again. Refuse a hand-in that lost it.
+if (!mainJs.includes("setSkyMode(missionId === 'storm'")) {
+  throw new Error('main.ts: storm sky wiring missing from game/src/main.js');
+}
+console.log('sky: per-mission sky wiring present in game/src/main.js');
+
+// Stage I-fix: the prop blades are a BLUR at flight RPM, not two dark bars —
+// at 0.55 opacity they strobed a dark diagonal wedge across the windshield in
+// the staged approach shots (and in live play, once per revolution). Refuse a
+// hand-in that put the opaque blades back.
+const planeJs = readFileSync(join(gameDir, 'src', 'plane.js'), 'utf8');
+if (!planeJs.includes('opacity: 0.15')) {
+  throw new Error('main.ts: prop blade opacity 0.15 missing from game/src/plane.js');
+}
+console.log('prop: faint blades (opacity 0.15) present in game/src/plane.js');
 
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 const shotFiles = existsSync(shotsDir)

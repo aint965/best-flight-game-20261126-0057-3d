@@ -53,7 +53,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.5, 20000);
 camera.position.set(600, 140, 900);
 
-const { stormWall, sun, lighthouseLight } = buildWorld(scene);
+const { stormWall, sun, lighthouseLight, setSkyMode } = buildWorld(scene);
 const plane = buildPlane(scene);
 const cockpit = buildCockpit(plane.group);
 const rings = buildRings(scene);
@@ -75,6 +75,9 @@ let screen = 'title';
 let best = readBest();
 let flight = createFlight(homeSpawn());
 let mission = createMission('rings');
+// Stage I-fix: the sky grade follows the mission (see reset()) — the driver
+// proves it through __game.skyMode, so the value lives here, not in terrain.
+let currentSkyMode = 'day';
 let camMode = 'chase';
 let camSettled = false;
 // Stage G (skill camera-systems): the look-ahead point is its own smoothed
@@ -287,6 +290,13 @@ function reset(missionId = 'rings', spawn = homeSpawn()) {
   // missions (and on the title screen, which resets to 'rings') it is off:
   // beam, halo and lit lamp core all switch together in setLight().
   lighthouseLight.setLight(missionId === 'storm');
+  // Stage I-fix: the whole ATMOSPHERE follows the mission too — the storm
+  // grade (dark slate sky, closer grey fog, dimmer sun, deeper sea) is on
+  // only for the Storm Courier; the two daylight missions and the title
+  // screen get the midday grade back, exactly (sun 2.5 — the driver asserts
+  // it on a rings page).
+  setSkyMode(missionId === 'storm' ? 'storm' : 'day');
+  currentSkyMode = missionId === 'storm' ? 'storm' : 'day';
   mission = createMission(missionId);
   camSettled = false;
   hud.hideBanner();
@@ -678,6 +688,12 @@ window.__game = {
    *  missions, on only in the Storm Courier. */
   get lighthouseLight() {
     return lighthouseLight.isOn;
+  },
+  /** Stage I-fix: the driver proves the sky grade follows the mission — 'day'
+   *  for the two daylight missions and the title screen, 'storm' only for the
+   *  Storm Courier. */
+  get skyMode() {
+    return currentSkyMode;
   },
   /**
    * Stage G (skill threejs-materials-lighting verification): the whole light

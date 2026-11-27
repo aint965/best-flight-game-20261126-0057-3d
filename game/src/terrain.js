@@ -214,9 +214,14 @@ function buildSky(scene) {
   // the ambient bounces are weaker, so the lit side reads bright and warm and
   // the shadow side reads deep and cool, instead of one flat grey. The camera
   // fill light in main.js drops with it (0.5 -> 0.35) for the same reason.
-  scene.add(new THREE.HemisphereLight(0x9cc8f0, 0x7a8a58, 0.65));
+  const hemi = new THREE.HemisphereLight(0x9cc8f0, 0x7a8a58, 0.65);
+  scene.add(hemi);
   scene.fog = new THREE.Fog(PALETTE.fog, 1800, 9500);
-  return sun;
+  // Stage I-fix: the sky is a grade, not a constant — buildWorld's setSkyMode
+  // needs the sky uniforms, the sun glow sprite and the hemisphere light to
+  // re-grade the whole atmosphere for the Storm Courier. Nothing here changes
+  // the light COUNT (the driver asserts exactly one shadow-casting light).
+  return { sun, skyMat, hemi, glow };
 }
 
 /** Move the shadow camera with the plane: the light sits 900 m out along the
@@ -357,9 +362,10 @@ function buildTerrainMesh(scene) {
 }
 
 function buildSea(scene, rng) {
+  const seaMat = new THREE.MeshPhongMaterial({ color: PALETTE.sea, shininess: 180, specular: 0xffffff });
   const sea = new THREE.Mesh(
     new THREE.CircleGeometry(7500, 48),
-    new THREE.MeshPhongMaterial({ color: PALETTE.sea, shininess: 180, specular: 0xffffff }),
+    seaMat,
   );
   sea.rotation.x = -Math.PI / 2;
   sea.position.set(TERRAIN_CENTER.x, 0.15, TERRAIN_CENTER.z);
@@ -451,6 +457,9 @@ function buildSea(scene, rng) {
   // the bright end sits at the western horizon and fades east.
   path.position.set(-650, 0.35, -150);
   scene.add(path);
+  // Stage I-fix: buildWorld's setSkyMode darkens the sea for the Storm
+  // Courier — the sea material is the one handle for it.
+  return seaMat;
 }
 
 function riverRibbon(width, yLift, color, opacity) {
@@ -1283,9 +1292,9 @@ function buildStormWall(scene, rng) {
 /** Build the whole static world into the scene. */
 export function buildWorld(scene) {
   const rng = createRandom(SEED + 5);
-  const sun = buildSky(scene);
+  const { sun, skyMat, hemi, glow } = buildSky(scene);
   buildTerrainMesh(scene);
-  buildSea(scene, rng);
+  const seaMat = buildSea(scene, rng);
   buildRiver(scene);
   buildRunways(scene);
   buildTrees(scene, rng);
@@ -1294,5 +1303,51 @@ export function buildWorld(scene) {
   const lighthouseLight = buildLighthouse(scene);
   buildClouds(scene, rng);
   const stormWall = buildStormWall(scene, rng);
-  return { stormWall, sun, lighthouseLight };
+  // Stage I-fix: the STORM GRADE — one switch for the whole atmosphere, so the
+  // Storm Courier reads as weather, not as a sunny day with dark clouds on the
+  // horizon. The Stage I storm shot proved the problem: bright blue sky, pale
+  // fog, full-strength sun — the front wall was the only dark thing in the
+  // frame. Storm mode darkens the sky shader (slate blue-grey), pulls the fog
+  // in closer and greyer, dims the sun (2.5 -> 1.8, shadows stay — same light,
+  // same map) and the hemisphere fill, mutes the sun glow sprite, and deepens
+  // the sea. Day mode restores every value exactly (the driver asserts the sun
+  // is 2.5 on a rings page, so the restore must be exact, not approximate).
+  // The beam is a MeshBasic additive mesh and the lamp core is MeshBasic, so
+  // neither is touched by the lights — the beam reads BETTER against the dark
+  // sky. The HUD is DOM and is untouched. main.js calls this from reset() with
+  // (missionId === 'storm'), next to the lighthouse setLight() call.
+  const DAY = {
+    top: PALETTE.skyTop, mid: PALETTE.skyMid, horizon: PALETTE.skyHorizon, sunColor: PALETTE.sun,
+    fog: PALETTE.fog, fogNear: 1800, fogFar: 9500,
+    hemiSky: 0x9cc8f0, hemiGround: 0x7a8a58, hemiIntensity: 0.65,
+    sunIntensity: 2.5, glowOpacity: 1, sea: PALETTE.sea,
+  };
+  const STORM = {
+    top: '#1d2f47', mid: '#3a5068', horizon: '#7c8fa2', sunColor: '#9aa7b8',
+    fog: '#66788a', fogNear: 1200, fogFar: 7000,
+    hemiSky: 0x6f87a8, hemiGround: 0x4a4a3a, hemiIntensity: 0.45,
+    sunIntensity: 1.8, glowOpacity: 0.25, sea: '#174e6e',
+  };
+  let skyMode = 'day';
+  function setSkyMode(mode) {
+    const g = mode === 'storm' ? STORM : DAY;
+    skyMode = mode === 'storm' ? 'storm' : 'day';
+    skyMat.uniforms.top.value.set(g.top);
+    skyMat.uniforms.mid.value.set(g.mid);
+    skyMat.uniforms.horizon.value.set(g.horizon);
+    skyMat.uniforms.sunColor.value.set(g.sunColor);
+    scene.fog.color.set(g.fog);
+    scene.fog.near = g.fogNear;
+    scene.fog.far = g.fogFar;
+    hemi.color.set(g.hemiSky);
+    hemi.groundColor.set(g.hemiGround);
+    hemi.intensity = g.hemiIntensity;
+    sun.intensity = g.sunIntensity;
+    glow.material.opacity = g.glowOpacity;
+    seaMat.color.set(g.sea);
+  }
+  return {
+    stormWall, sun, lighthouseLight, setSkyMode,
+    get skyMode() { return skyMode; },
+  };
 }

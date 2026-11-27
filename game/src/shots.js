@@ -215,6 +215,29 @@ export function stageShot(sim, name) {
     }
     return flown;
   }
+  if (name === 'cockpit-approach-bank') {
+    // Stage I-fix: the SAME short final, but the plane starts 34° off the
+    // strip heading and CLOSE (450 m out, low), so it is still BANKED when the
+    // shot breaks — this is the condition the Stage I approach frame caught
+    // the dark diagonal wedge in. The break fires on the bank itself
+    // (|bank| > 0.12 while closing), not on altitude: the first version broke
+    // on (within 500 m AND below 55 m), but the turn finishes in ~5 s while
+    // the descent to 55 m takes far longer, so the plane had already
+    // straightened (bank 0, heading -1°) by the time the altitude gate fired
+    // and the driver rightly failed the bank check. The driver asserts the
+    // bank magnitude and that the frame is clean of the wedge (verified by a
+    // human looking at the shot).
+    sim.reset({ x: -35, y: 55, z: 450, heading: 0.6, speed: 26, throttle: 42 }, 'rings');
+    sim.rings.setVisible(false);
+    let flown = 0;
+    for (let t = 0; t < 45; t += STEP) {
+      const f = sim.flight;
+      sim.step(STEP, landingInput(f, -35, 0));
+      flown += STEP;
+      if ((near2(f, -35, 0, 450) && Math.abs(f.bank) > 0.12) || f.landed || f.crashed) break;
+    }
+    return flown;
+  }
   if (name === 'lighthouse') {
     // Fly-by past the coastal lighthouse: the plane 250 m west of the tower at
     // 60 m, heading east — the chase camera puts the white tower, its rock plinth

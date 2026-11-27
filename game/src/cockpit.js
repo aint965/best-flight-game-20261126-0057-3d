@@ -133,15 +133,23 @@ export function buildCockpit(planeGroup) {
   // (±0.80), and in the warm mid-grey pillarMat instead of near-black
   // leather: a frame member now, not a black bar. The top bar follows the
   // same material so the windshield frame reads as one piece.
+  // Stage I-fix (user: "Kaca bagian kotpit terlalu kecil"): the glass is still
+  // a slit — the wing sits right over the windshield, so the frame must grow
+  // UP with it. The wing rises to y 1.50 (plane.js), so the pillars grow
+  // taller (1.30, centre 0.76 — tops at 1.41, meeting the raised top bar) and
+  // wider still (±0.82, as far as the side walls at ±0.86 allow), and the top
+  // bar rises to 1.34. The glass top edge is the wing's leading edge, not the
+  // bar — the bar only frames it — so the taller frame plus the higher wing
+  // together open the glass from ~17° to ~21° of the 62° field.
   for (const side of [-1, 1]) {
-    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.032, 1.15, 0.032), pillarMat);
-    pillar.position.set(side * 0.80, 0.68, -0.88);
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.032, 1.30, 0.032), pillarMat);
+    pillar.position.set(side * 0.82, 0.76, -0.88);
     pillar.rotation.z = -side * 0.12;
     pillar.rotation.x = 0.15;
     group.add(pillar);
   }
   const topBar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.06), pillarMat);
-  topBar.position.set(0, 1.22, -0.92);
+  topBar.position.set(0, 1.34, -0.92);
   group.add(topBar);
 
   // --- The room: side walls, headliner, floor, rear bulkhead. Stage F, second
@@ -157,13 +165,24 @@ export function buildCockpit(planeGroup) {
   // z -0.05 the edge is ~27° up, so the black band shrinks to ~6% of the
   // frame and the sky opens up between the top bar and the roof. The roof
   // above and behind the pilot stays covered (z -0.05..0.65).
+  // Stage I-fix: the Stage I shots STILL show a ~20-25% khaki band over the
+  // glass — but the probe says it is NOT the headliner. The headliner front
+  // edge already sits at ~27° up, just inside the 28° frame top, so it can
+  // cover at most a sliver; the band is the WING's underside in shadow (the
+  // high wing spans 15° to overhead from the eye — it fills the whole top of
+  // the frame). The headliner still moves back (centre z 0.44, front edge
+  // z 0.09, ~35° up — above the frame top, so it can never appear in the
+  // frame at all), and the real fix for the band is the wing rising to 1.50
+  // (plane.js), which lifts the wing's leading edge from ~12.5° to ~16.6°
+  // and shrinks the wing band from ~25% to ~18% of the frame. The roof
+  // above and behind the pilot stays covered (z 0.09..0.79).
   for (const side of [-1, 1]) {
     const wall = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, 1.7), interior);
     wall.position.set(side * 0.86, 0.38, 0.05);
     group.add(wall);
   }
   const headliner = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.05, 0.7), interior);
-  headliner.position.set(0, 1.16, 0.30);
+  headliner.position.set(0, 1.16, 0.44);
   group.add(headliner);
   const floor = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.05, 1.9), floorMat);
   floor.position.set(0, -0.52, 0.05);
