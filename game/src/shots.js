@@ -247,10 +247,22 @@ export function stageShot(sim, name) {
   // coastal lighthouse — a 32 m tower, not the old 120 m monument — reads bigger
   // in frame without changing its realistic scale; the volcano is still ~2.9 km
   // out and fits whole. blocksHero's cover cones moved with the new camera.
-  sim.reset({ x: 1000, y: 145, z: -260, heading: 1.57, speed: 34, throttle: 72 }, 'rings');
+  // Stage H: the start moves 80 m NORTH (1000, 145, -180). In Stage G the
+  // third ring (1300, 180, -150) sat ~39° right of the camera axis and its
+  // right edge was cut by the frame; 80 m north puts it ~20° right with its
+  // whole 28 m disc inside the frame, while the volcano stays right of
+  // centre and the lighthouse — now ~340 m away instead of ~540 m — reads
+  // bigger at the coast, low mid-frame. blocksHero's cover cones move again.
+  // Stage H, second pass: the north move fixed the RIGHT edge, but the ring
+  // was still cut at the TOP edge — it sits only ~100 m from the camera after
+  // 6 s of flight, so its 28 m disc spans ~26° and its top clears the frame.
+  // The flight is shortened 6 s -> 4 s: the camera stops ~70 m further west,
+  // the ring is ~170 m out and ~9° across, and its whole disc sits inside
+  // the frame with margin, clear of the HUD panels on the right.
+  sim.reset({ x: 1000, y: 145, z: -180, heading: 1.57, speed: 34, throttle: 72 }, 'rings');
   const rings = sim.rings;
   let flown = 0;
-  for (let t = 0; t < 6; t += STEP) {
+  for (let t = 0; t < 4; t += STEP) {
     const target = rings.rings[rings.rings.length - 1];
     sim.step(STEP, autopilotInput(sim.flight, target, 72));
     flown += STEP;

@@ -634,18 +634,23 @@ function buildTrees(scene, rng) {
   const coneGeo = new THREE.ConeGeometry(3.4, 9, 6);
   const cone2Geo = new THREE.ConeGeometry(2.3, 6, 6);
   const cone3Geo = new THREE.ConeGeometry(1.5, 4, 6);
+  // Stage H: a fourth, small top cone for the old-growth giants only — the
+  // layered crown reads taller and less like a stacked Christmas tree.
+  const cone4Geo = new THREE.ConeGeometry(1.0, 3.5, 6);
   const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2f });
   const leafMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
   const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, spots.length);
   const cones = new THREE.InstancedMesh(coneGeo, leafMat, spots.length);
   const cones2 = new THREE.InstancedMesh(cone2Geo, leafMat, spots.length);
   const cones3 = new THREE.InstancedMesh(cone3Geo, leafMat, spots.length);
+  const cones4 = new THREE.InstancedMesh(cone4Geo, leafMat, spots.length);
   // Stage G: every tree casts a real shadow now (sun + shadow map), so a forest
   // reads as a forest from the air instead of a flat green carpet.
   trunks.castShadow = true;
   cones.castShadow = true;
   cones2.castShadow = true;
   cones3.castShadow = true;
+  cones4.castShadow = true;
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const s = new THREE.Vector3();
@@ -664,17 +669,26 @@ function buildTrees(scene, rng) {
     p.set(x, h + 1.5 * sy, z);
     m.compose(p, q, s);
     trunks.setMatrixAt(i, m);
+    // Stage H: the crown LEANS — each tree's upper cones are offset sideways
+    // in one fixed direction (golden-angle from the tree index, so no rng is
+    // consumed and the Stage G forest keeps its exact spots), growing with
+    // height: the stack stops being a perfectly vertical Christmas tree and
+    // reads as a pine that grew against the wind. The base cone stays on the
+    // trunk; the lean is only in the crown.
+    const leanA = (i * 2.39996) % (Math.PI * 2);
+    const leanX = Math.cos(leanA);
+    const leanZ = Math.sin(leanA);
     p.set(x, h + (3 + 4.5) * sy, z);
     m.compose(p, q, s);
     cones.setMatrixAt(i, m);
-    p.set(x, h + (3 + 8) * sy, z);
+    p.set(x + leanX * 0.4 * sx, h + (3 + 8) * sy, z + leanZ * 0.4 * sx);
     m.compose(p, q, s);
     cones2.setMatrixAt(i, m);
     // A third, smaller top cone on ~60% of trees: a layered crown, not a smooth
     // two-cone Christmas tree. Giants always get one — they are the layered ones.
     const hasTop = giant || rng.next() < 0.6;
     if (hasTop) {
-      p.set(x, h + (3 + 11) * sy, z);
+      p.set(x + leanX * 0.8 * sx, h + (3 + 11) * sy, z + leanZ * 0.8 * sx);
       m.compose(p, q, s);
       cones3.setMatrixAt(i, m);
     } else {
@@ -682,6 +696,20 @@ function buildTrees(scene, rng) {
       p.set(x, h, z);
       m.compose(p, q, s);
       cones3.setMatrixAt(i, m);
+    }
+    // Stage H: giants get a fourth, smallest top cone, leaning furthest — the
+    // old-growth crowns are the layered ones. Other trees hide theirs at
+    // zero scale, the same pattern as cones3.
+    if (giant) {
+      p.set(x + leanX * 1.1 * sx, h + (3 + 13.5) * sy, z + leanZ * 1.1 * sx);
+      s.set(sx, sy, sz);
+      m.compose(p, q, s);
+      cones4.setMatrixAt(i, m);
+    } else {
+      s.set(0, 0, 0);
+      p.set(x, h, z);
+      m.compose(p, q, s);
+      cones4.setMatrixAt(i, m);
     }
     // Stage F, second pass — the tree/ground mismatch: pines were HSL(0.33–0.37,
     // 0.55, 0.28–0.40), a saturated pure green, while the ground is a muted
@@ -695,18 +723,22 @@ function buildTrees(scene, rng) {
     cones.setColorAt(i, col);
     cones2.setColorAt(i, col);
     cones3.setColorAt(i, col);
+    cones4.setColorAt(i, col);
   });
   trunks.instanceMatrix.needsUpdate = true;
   cones.instanceMatrix.needsUpdate = true;
   cones2.instanceMatrix.needsUpdate = true;
   cones3.instanceMatrix.needsUpdate = true;
+  cones4.instanceMatrix.needsUpdate = true;
   if (cones.instanceColor) cones.instanceColor.needsUpdate = true;
   if (cones2.instanceColor) cones2.instanceColor.needsUpdate = true;
   if (cones3.instanceColor) cones3.instanceColor.needsUpdate = true;
+  if (cones4.instanceColor) cones4.instanceColor.needsUpdate = true;
   scene.add(trunks);
   scene.add(cones);
   scene.add(cones2);
   scene.add(cones3);
+  scene.add(cones4);
 }
 
 /** Near-camera ground detail: bushes, rocks and flower dots on the two low islands,
@@ -1004,14 +1036,15 @@ function buildLighthouse(scene) {
  *  meant to show. */
 function blocksHero(cx, cy, cz) {
   // Cover cone: from the far camera behind the staged cover plane — the plane
-  // starts at (1000, 145, -260) heading east, the far camera sits 36 m behind
-  // it at ~(964, 152, -260) — axis east. The volcano's angular box from
+  // starts at (1000, 145, -180) heading east, the far camera sits 36 m behind
+  // it at ~(964, 152, -180) — axis east. The volcano's angular box from
   // there is roughly ha -15°..+22°, va -3°..+9°; the margins allow for cloud size.
   // (Stage G moved the cover staging 400 m east so the coastal lighthouse reads
-  // bigger; the cone origin moved with it.)
+  // bigger; the cone origin moved with it. Stage H moves the staging 80 m
+  // north so the third ring is whole in frame; the cone origin moves again.)
   const dx = cx - 964;
   const dy = cy - 152;
-  const dz = cz + 260;
+  const dz = cz + 180;
   if (dx > 300 && dx < 3600) {
     const ha = Math.atan2(dz, dx);
     const va = Math.atan2(dy, dx);
@@ -1022,11 +1055,11 @@ function blocksHero(cx, cy, cz) {
   // would sit on the tower in the frame.
   const ldx = cx - 964;
   const ldy = cy - 152;
-  const ldz = cz + 260;
+  const ldz = cz + 180;
   const lvLen = Math.sqrt(ldx * ldx + ldy * ldy + ldz * ldz);
-  const laLen = Math.sqrt(536 * 536 + 111 * 111 + 10 * 10);
+  const laLen = Math.sqrt(536 * 536 + 111 * 111 + 70 * 70);
   if (lvLen > 300 && lvLen < 1500) {
-    const cos = (ldx * 536 + ldy * -111 + ldz * 10) / (lvLen * laLen);
+    const cos = (ldx * 536 + ldy * -111 + ldz * -70) / (lvLen * laLen);
     if (cos > 0.997) return true;
   }
   // Rings-shot cone: from (428, 118, -343) toward the lighthouse lamp (1500, 41, -250).

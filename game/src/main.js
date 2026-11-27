@@ -342,13 +342,26 @@ function updateCamera(dt) {
     // pointed UP (+2°) and the whole runway hid behind the panel on final —
     // the approach shot showed sky and a sliver of horizon, no runway. At
     // 0.85 the eye is 8 cm above the lowered lip (0.77) and the sightline
-    // reaches ~3.5° below the horizon: the threshold is visible. The wing
-    // (y 1.36) now grazes the top edge of the frame as a thin pale strip —
-    // the intended Stage G look, not the old red wall.
+    // reaches ~3.5° below the horizon: the horizon, terrain, sea and volcano
+    // read through the windshield. (Stage G's note claimed the threshold was
+    // visible too — the short-final shot proved it wrong: the threshold sits
+    // ~4-5° down at 400 m and still hid behind the lip. Stage H lowers the
+    // lip to 0.72 instead; see cockpit.js.)
+    // Stage H: the cockpit camera looks 3° DOWN from the airframe axis. The
+    // bottom gauge row was already half-cut by the frame edge in Stage G —
+    // the engine dials' bottoms sit ~33° below the axis against a 31°
+    // half-field of view — and raising the eye to fix it would push the
+    // panel down further. A fixed 3° down-look (the pilot's natural glance
+    // at the panel, within the camera-systems skill's cockpit pitch clamp)
+    // brings the full engine row into the frame without moving any geometry,
+    // and it does not change the physical sightline over the glareshield lip
+    // (that is set by the eye and the lip, not by the camera's pitch). The
+    // attitude gauge still shows the true pitch; only the view is reframed.
     const eye = new THREE.Vector3(0, 0.85, 0.50);
     plane.group.localToWorld(eye);
     camera.position.copy(eye);
     camera.quaternion.copy(plane.group.quaternion);
+    camera.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.052));
     fillLight.position.copy(camera.position);
     fillLight.target.position.set(flight.x, flight.y, flight.z);
     camSettled = true;

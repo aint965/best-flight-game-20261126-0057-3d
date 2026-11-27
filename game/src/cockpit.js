@@ -47,6 +47,13 @@ export function buildCockpit(planeGroup) {
 
   const interior = new THREE.MeshLambertMaterial({ color: 0x3a3f45, side: THREE.DoubleSide });
   const darkLeather = new THREE.MeshLambertMaterial({ color: 0x2a2320, side: THREE.DoubleSide });
+  // Stage H: the A-pillars and the top bar are NOT black bars any more. Stage G
+  // slimmed them (0.045 m) and they still read as thick black slabs in the
+  // cockpit shots — near-black leather against a bright sky. A warm mid-grey
+  // brown reads as a frame member, not a black bar; the pillars are also
+  // slimmer (0.032), less raked and set wider, so more world shows between
+  // them and the windshield.
+  const pillarMat = new THREE.MeshLambertMaterial({ color: 0x7a6f60, side: THREE.DoubleSide });
   const floorMat = new THREE.MeshLambertMaterial({ color: 0x24262a, side: THREE.DoubleSide });
   const metal = new THREE.MeshPhongMaterial({ color: 0x8a8f96, shininess: 60 });
   const black = new THREE.MeshLambertMaterial({ color: 0x1a1c20 });
@@ -71,13 +78,18 @@ export function buildCockpit(planeGroup) {
   group.add(panelBack);
 
   // --- Glareshield, its shadow, and the magnetic compass on top. ------------
-  // Stage G, second pass: the glareshield sits LOWER (y 0.77, was 0.80) — with
-  // the eye raised to 0.85 (main.js), the sightline over its lip now reaches
-  // ~3.5° below the horizon, so the runway threshold is visible on final
-  // approach instead of hiding behind the panel. It still sits just above the
-  // panel top (0.745), so no gauge is covered.
+  // Stage H: the lip comes DOWN 0.77 -> 0.72. Stage G's note said the
+  // threshold was visible at 0.77, but the short-final shot proved otherwise:
+  // the sightline over the lip only reached ~3.5° below the horizon and the
+  // threshold (about 4-5° down at 400 m) still hid behind the lip. At 0.72
+  // the sightline reaches ~6° below the horizon, so the threshold and the
+  // "36" numbers read on short final. The eye stays at 0.85 — raising it
+  // further would push the panel down in the frame and clip the bottom
+  // gauge row, which the brief forbids. The six-pack top (y ~0.60) still
+  // clears the lowered lip: the sightline to it passes a few millimetres
+  // under the lip's front-bottom edge, so no gauge is lost to the shield.
   const glareshield = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.07, 0.38), darkLeather);
-  glareshield.position.set(0, 0.77, -0.60);
+  glareshield.position.set(0, 0.72, -0.60);
   glareshield.rotation.x = 0.15;
   group.add(glareshield);
   // The glareshield's own shadow: a translucent dark plane hanging below its lip
@@ -86,12 +98,12 @@ export function buildCockpit(planeGroup) {
   // a grey wash over the compass tape. Now it is a tight (0.30 m) band at 0.32:
   // a crisp line of shade with a visible edge, the way a real glareshield
   // throws one at noon — and it stops above the six-pack, so no gauge is ever
-  // shaded.
+  // shaded. Stage H: the plane rides down with the lip, 0.61 -> 0.58.
   const glareshadow = new THREE.Mesh(
     new THREE.PlaneGeometry(1.5, 0.30),
     new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }),
   );
-  glareshadow.position.set(0, 0.61, -0.70);
+  glareshadow.position.set(0, 0.58, -0.70);
   glareshadow.rotation.x = 0.35;
   group.add(glareshadow);
   const compassCanvas = document.createElement('canvas');
@@ -104,7 +116,7 @@ export function buildCockpit(planeGroup) {
     new THREE.PlaneGeometry(0.30, 0.056),
     new THREE.MeshBasicMaterial({ map: compassTex }),
   );
-  compass.position.set(0, 0.83, -0.62);
+  compass.position.set(0, 0.78, -0.62); // Stage H: rides down with the lowered lip (was 0.83).
   compass.rotation.x = -0.5;
   group.add(compass);
 
@@ -116,14 +128,19 @@ export function buildCockpit(planeGroup) {
   // (±0.76, was ±0.72) with less lean — the Stage F pillars were still thick
   // black bars eating the corners of the windshield. The world through the
   // glass opens up a little more on both sides.
+  // Stage H: still not enough — the Stage G cockpit shots show two thick
+  // BLACK diagonal bars. Slimmer again (0.032), less lean (0.12), wider
+  // (±0.80), and in the warm mid-grey pillarMat instead of near-black
+  // leather: a frame member now, not a black bar. The top bar follows the
+  // same material so the windshield frame reads as one piece.
   for (const side of [-1, 1]) {
-    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.045, 1.15, 0.045), darkLeather);
-    pillar.position.set(side * 0.76, 0.68, -0.88);
-    pillar.rotation.z = -side * 0.18;
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.032, 1.15, 0.032), pillarMat);
+    pillar.position.set(side * 0.80, 0.68, -0.88);
+    pillar.rotation.z = -side * 0.12;
     pillar.rotation.x = 0.15;
     group.add(pillar);
   }
-  const topBar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.06), darkLeather);
+  const topBar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.06), pillarMat);
   topBar.position.set(0, 1.22, -0.92);
   group.add(topBar);
 
@@ -133,13 +150,20 @@ export function buildCockpit(planeGroup) {
   //  over the pilot's eyes and filled the top third of the windshield with a
   //  black slab; raised, it is only the roofline, and the sky opens up above
   //  the wing.
+  // Stage H: shorter STILL (depth 0.7, centre z 0.30 — its front edge moves
+  // from z -0.35 to z -0.05). The Stage G cockpit shots still show a black
+  // band over the top ~20% of the frame: that is the headliner's underside,
+  // unlit, and its front edge sits only ~18° above the eye's sightline. At
+  // z -0.05 the edge is ~27° up, so the black band shrinks to ~6% of the
+  // frame and the sky opens up between the top bar and the roof. The roof
+  // above and behind the pilot stays covered (z -0.05..0.65).
   for (const side of [-1, 1]) {
     const wall = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, 1.7), interior);
     wall.position.set(side * 0.86, 0.38, 0.05);
     group.add(wall);
   }
-  const headliner = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.05, 1.0), interior);
-  headliner.position.set(0, 1.16, 0.15);
+  const headliner = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.05, 0.7), interior);
+  headliner.position.set(0, 1.16, 0.30);
   group.add(headliner);
   const floor = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.05, 1.9), floorMat);
   floor.position.set(0, -0.52, 0.05);

@@ -167,24 +167,32 @@ function buildMapBase(w, h, islands) {
   ctx.strokeStyle = 'rgba(10, 14, 24, 0.7)';
   ctx.lineWidth = 1;
   ctx.stroke();
-  // Stage G: the lighthouse marker is bigger and ringed now — the old 2.5 px
-  // white dot vanished against the sea at the map's size. A 4 px dot with a red
-  // ring reads as a lighthouse, not a speck, and it still sits on the same
-  // LIGHTHOUSE constant as the 3D tower, so it can never drift from it.
+  // Stage H: the lighthouse marker is bigger and ringed AGAIN — the Stage G
+  // 4 px dot with a 6 px ring still vanished against the sea in the minimap
+  // zoom (the tower is 32 m on a 10.4 km map; a speck reads as nothing). Now
+  // a 6 px white dot, an 8.5 px red ring at 2.5 px, a dark outline, and a
+  // white halo at 10.5 px so it pops against both sea and sand — and it
+  // still sits on the same LIGHTHOUSE constant as the 3D tower, so it can
+  // never drift from it.
   const [lx, ly] = toMap(LIGHTHOUSE.x, LIGHTHOUSE.z);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(lx, ly, 10.5, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.arc(lx, ly, 4, 0, Math.PI * 2);
+  ctx.arc(lx, ly, 6, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = '#c23b2a';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.arc(lx, ly, 6, 0, Math.PI * 2);
+  ctx.arc(lx, ly, 8.5, 0, Math.PI * 2);
   ctx.stroke();
   ctx.strokeStyle = 'rgba(10, 14, 24, 0.7)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(lx, ly, 4, 0, Math.PI * 2);
+  ctx.arc(lx, ly, 6, 0, Math.PI * 2);
   ctx.stroke();
   // North arrow, top-left, so the heading triangle can be read against it.
   ctx.fillStyle = '#eef1f5';

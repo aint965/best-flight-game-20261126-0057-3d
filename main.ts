@@ -91,6 +91,32 @@
 // lighthouse marker is a ringed dot, and the volcano's ash cap and crater get
 // real rock texture. Nothing else changes: midday, coastal lighthouse, live
 // gauges, menus, missions, minimap, "36"/"03", river, chase view.
+// Stage H (2026-11-27, user: "Perbaiki lagi" — the Stage G leftovers, verified
+// from the screenshots, not from memory): (1) the A-pillars STILL read as two
+// thick black diagonal bars — slimmer again (0.032), less lean (0.12), wider
+// (±0.80) and in a warm mid-grey (0x7a6f60) instead of near-black leather, so
+// they read as a frame member; the top bar follows the same material. (2) The
+// runway threshold on short final: Stage G's note claimed it was visible at
+// a 0.77 lip, but the approach shot proved it wrong — the threshold still hid
+// behind the lip. The lip comes down to 0.72 (compass 0.78, shadow plane
+// 0.58 ride with it), so the sightline reaches ~6° below the horizon; the
+// eye stays at 0.85 and the six-pack still clears the lip. (3) The bottom
+// gauge row was already half-cut by the frame edge in Stage G (the engine
+// dials' bottoms sit ~33° below the camera axis against a 31° half-field of
+// view) — the cockpit camera now looks a fixed 3° down from the airframe
+// axis, the pilot's natural glance at the panel, which brings the full
+// engine row into frame without moving any geometry. (4) The headliner is
+// shorter still (depth 0.7, front edge z -0.05): the black band over the top
+// of the windshield shrinks from ~20% of the frame to ~6%. (5) The cover
+// staging moves 80 m north (1000, 145, -180) so the third ring, which Stage G
+// cut at the frame's right edge, is whole in frame; the volcano stays right
+// of centre and the lighthouse reads bigger (~340 m away). (6) The minimap
+// lighthouse marker is bigger again (6 px dot, 8.5 px red ring, white halo)
+// — the Stage G marker still vanished in the zoom. (7) Trees lean: the crown
+// cones are offset sideways in one fixed direction per tree (golden-angle
+// from the index, no rng consumed, so the Stage G forest keeps its spots),
+// and the giants get a fourth top cone. Same midday palette, same sharp
+// shadows, same chase camera, same missions and scores.
 // This program copies game/ and screenshots/ from beside this file to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 // The copy is byte for byte the same on every run: no timestamps, no randomness here.
@@ -133,6 +159,16 @@ for (const id of MENU_OVERLAYS) {
   if (!html.includes(`id="${id}"`)) throw new Error(`main.ts: menu overlay #${id} missing from game/index.html`);
 }
 console.log(`menus: ${MENU_OVERLAYS.join(', ')} present in game/index.html`);
+
+// Stage H: the cockpit view is the entry's most fragile piece — the threshold
+// and the bottom gauge row both hid behind the panel or the frame edge in
+// earlier stages. Refuse a hand-in whose cockpit camera lost its fixed
+// down-look: without the pitch offset the bottom gauge row is half-cut again.
+const mainJs = readFileSync(join(gameDir, 'src', 'main.js'), 'utf8');
+if (!mainJs.includes('setFromAxisAngle(new THREE.Vector3(1, 0, 0)')) {
+  throw new Error('main.ts: cockpit camera pitch offset missing from game/src/main.js');
+}
+console.log('cockpit: pitch offset present in game/src/main.js');
 
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 const shotFiles = existsSync(shotsDir)
