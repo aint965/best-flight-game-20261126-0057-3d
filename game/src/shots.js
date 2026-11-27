@@ -232,6 +232,21 @@ export function stageShot(sim, name) {
     }
     return flown;
   }
+  if (name === 'storm-lighthouse') {
+    // Stage I: the SAME fly-by, staged in the Storm Courier — the only mission
+    // whose lamp is on. The chase camera looks east toward the dark front wall
+    // while the beam sweeps west toward the camera, so the frame must show the
+    // beam + halo + lit lamp core that the daylight fly-by above must NOT show.
+    sim.reset({ x: 1250, y: 60, z: -280, heading: 1.57, speed: 30, throttle: 60 }, 'storm');
+    sim.rings.setVisible(false);
+    let flown = 0;
+    for (let t = 0; t < 3; t += STEP) {
+      sim.step(STEP, autopilotInput(sim.flight, { x: 1500, y: 60, z: -280 }, 60));
+      flown += STEP;
+      if (sim.flight.crashed) break;
+    }
+    return flown;
+  }
   if (name === 'exterior') {
     // Walkaround: the plane parked on the home strip, engine idling. main.js
     // places the camera three-quarter front, close enough to read the skin.

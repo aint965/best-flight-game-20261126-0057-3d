@@ -53,7 +53,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.5, 20000);
 camera.position.set(600, 140, 900);
 
-const { stormWall, sun } = buildWorld(scene);
+const { stormWall, sun, lighthouseLight } = buildWorld(scene);
 const plane = buildPlane(scene);
 const cockpit = buildCockpit(plane.group);
 const rings = buildRings(scene);
@@ -282,6 +282,11 @@ function reset(missionId = 'rings', spawn = homeSpawn()) {
   rings.setVisible(missionId !== 'hop');
   stormWall.visible = missionId === 'storm';
   stormWall.position.x = 4600;
+  // Stage I: the lighthouse lamp burns only in the Storm Courier — the dark
+  // sky by the front is the one place a beam reads true. In the two daylight
+  // missions (and on the title screen, which resets to 'rings') it is off:
+  // beam, halo and lit lamp core all switch together in setLight().
+  lighthouseLight.setLight(missionId === 'storm');
   mission = createMission(missionId);
   camSettled = false;
   hud.hideBanner();
@@ -668,6 +673,11 @@ window.__game = {
   /** Stage G: the driver proves the real shadow system is on (PCFSoft in r160). */
   get shadows() {
     return renderer.shadowMap.enabled && renderer.shadowMap.type === THREE.PCFSoftShadowMap;
+  },
+  /** Stage I: the driver proves the lighthouse lamp state — off in daylight
+   *  missions, on only in the Storm Courier. */
+  get lighthouseLight() {
+    return lighthouseLight.isOn;
   },
   /**
    * Stage G (skill threejs-materials-lighting verification): the whole light

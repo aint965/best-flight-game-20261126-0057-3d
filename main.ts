@@ -117,6 +117,26 @@
 // from the index, no rng consumed, so the Stage G forest keeps its spots),
 // and the giants get a fourth top cone. Same midday palette, same sharp
 // shadows, same chase camera, same missions and scores.
+// Stage I (2026-11-27, user: "Itu mercusuarnya masa siang lampunya juga nyala"
+// + "Pesawatnya kamu buat lebih sangar aja"): two fixes in one round. (1) The
+// lighthouse lamp is a LIGHT, not a fixture — at noon it burned a beam across
+// the sea under a bright sun, which the user caught in the Stage H cover shot.
+// The beam, the halo sprite and the lit lamp core now switch together through
+// setLight(), wired in reset() to (missionId === 'storm'): on only in the Storm
+// Courier, where the dark front makes a beam true, and off in the two daylight
+// missions and on the title screen. The lamp room glass is dark slate by day
+// (an unlit lamp) and bright only when the light is on; the tower, bands,
+// cottage and plinth never change, and the minimap marker is a map symbol, not
+// a light. A new storm-lighthouse shot stages the same fly-by in the Storm
+// Courier to prove the beam is there — and only there. (2) The plane goes
+// warbird: charcoal cowling, a bigger dark spinner, a shark mouth on the
+// cowling (one marking, gape toward the nose, mirrored canvases per side),
+// a sharper nose profile that dives to the point, a thick black cheatline with
+// a white pinstripe, a charcoal belly stripe, charcoal wingtips and fin tip,
+// longer exhausts and heavier panel lines. Still the same red Indonesian bush
+// plane (PK-LNI, same wingspan, same fuselage length) — silhouette and livery
+// only, so the flight model and the verified sim scores do not move, and the
+// sharper nose keeps the runway threshold visible from the cockpit on final.
 // This program copies game/ and screenshots/ from beside this file to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 // The copy is byte for byte the same on every run: no timestamps, no randomness here.
@@ -170,6 +190,14 @@ if (!mainJs.includes('setFromAxisAngle(new THREE.Vector3(1, 0, 0)')) {
 }
 console.log('cockpit: pitch offset present in game/src/main.js');
 
+// Stage I: the lighthouse lamp is a light, not a fixture — it must be off in
+// daylight and on only in the Storm Courier. Refuse a hand-in that lost the
+// per-mission wiring: without it the beam burns at noon again.
+if (!mainJs.includes("lighthouseLight.setLight(missionId === 'storm')")) {
+  throw new Error('main.ts: lighthouse light wiring missing from game/src/main.js');
+}
+console.log('lighthouse: per-mission light wiring present in game/src/main.js');
+
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 const shotFiles = existsSync(shotsDir)
   ? readdirSync(shotsDir).filter((name) => !name.startsWith('.'))
@@ -194,7 +222,7 @@ let gameBytes = 0;
 })(gameDir);
 console.log(`game/: ${gameFiles} file(s), ${gameBytes} byte(s) (caps: ${DOSSIER_CAPS.game_max_files} files, ${DOSSIER_CAPS.game_max_bytes} bytes)`);
 
-console.log(`handed in ${shotFiles.length} screenshot(s): ${shotFiles.join(', ') || 'none'}`);
+console.log(`handed in ${shotFiles.length} screenshot(s): ${shotFiles.join(', ')}`);
 for (const name of shotFiles) {
   const bytes = statSync(join(shotsDir, name)).size;
   console.log(`screenshot ${name}: ${bytes} byte(s) (cap ${DOSSIER_CAPS.screenshots.max_bytes})`);

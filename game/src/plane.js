@@ -8,8 +8,9 @@ import * as THREE from '../vendor/three.module.min.js';
 import { PALETTE } from './config.js';
 import { groundAt } from './world.js';
 
-/** The fuselage skin: red base, a darker belly stripe, a white cheatline along
- *  each side at window height, longeron + frame panel lines and rivet dots.
+/** The fuselage skin: red base, a charcoal belly stripe, a thick black
+ *  cheatline with a white pinstripe along each side at window height,
+ *  longeron + frame panel lines and rivet dots.
  *  Lathe u maps around the fuselage (0 = top, 0.25 = right side, 0.5 = belly,
  *  0.75 = left side) and v runs tail -> nose, so the cheatline sits at
  *  u ~0.18 / ~0.82 (just above the side centreline) and the belly stripe at
@@ -21,16 +22,26 @@ function fuselageTexture() {
   const g = c.getContext('2d');
   g.fillStyle = PALETTE.planeRed;
   g.fillRect(0, 0, 512, 512);
-  // Belly stripe, darker red, full length.
-  g.fillStyle = '#a82c1e';
-  g.fillRect(236, 0, 40, 512);
-  // Cheatlines: white stripes along each side at window height.
+  // Stage I ("sangar"): the belly stripe is CHARCOAL now, wider — a dark
+  // underbelly against the red, the way a warbird reads from below.
+  g.fillStyle = '#202227';
+  g.fillRect(228, 0, 56, 512);
+  // Cheatlines: THICK charcoal stripes along each side at window height, each
+  // with a thin white pinstripe on its upper edge — sharp, not soft. The old
+  // white 16 px cheatline read friendly; the black 26 px one reads mean.
+  g.fillStyle = '#202227';
+  g.fillRect(77, 30, 26, 450);
+  g.fillRect(409, 30, 26, 450);
+  // One thin white pinstripe along the TOP edge of each cheatline (the edge
+  // toward the fuselage top: smaller u on the right side, larger u on the
+  // left) — the white line makes the black band read razor-sharp.
   g.fillStyle = PALETTE.planeWhite;
-  g.fillRect(82, 30, 16, 450);
-  g.fillRect(414, 30, 16, 450);
-  // Longeron lines (constant u, running nose to tail).
-  g.strokeStyle = 'rgba(120, 20, 10, 0.45)';
-  g.lineWidth = 1.5;
+  g.fillRect(73, 30, 4, 450);
+  g.fillRect(435, 30, 4, 450);
+  // Longeron lines (constant u, running nose to tail) — heavier now, so the
+  // panel work reads at a distance instead of washing out in the sun.
+  g.strokeStyle = 'rgba(120, 20, 10, 0.6)';
+  g.lineWidth = 2;
   for (let x = 0; x <= 512; x += 32) {
     g.beginPath();
     g.moveTo(x, 0);
@@ -92,13 +103,76 @@ function textDecal(lines, w, h) {
   return mesh;
 }
 
+/** Shark mouth for the cowling (Stage I, "sangar"): the ONE aggressive marking,
+ *  chosen over a lightning stripe — a shark mouth is the bush-plane warbird
+ *  classic and reads from the side, where the plane is mostly seen. The gape
+ *  opens toward the NOSE. A decal's canvas +x maps to the nose on the right
+ *  side and to the tail on the left side (the Y rotation flips it), so the two
+ *  sides need mirrored canvases — `flip` mirrors the drawing, and the caller
+ *  passes flip = (side < 0). */
+function sharkMouthDecal(flip) {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, 512, 256);
+  if (flip) { g.translate(512, 0); g.scale(-1, 1); }
+  // Jaw shape: hinge at the back (x ~70), gape open at the front (x 512).
+  // The upper edge dips toward the front and the lower edge rises, so the
+  // mouth is widest open at the nose, right behind the spinner.
+  const upper = [[70, 92], [180, 78], [300, 66], [410, 62], [505, 66]];
+  const lower = [[505, 196], [410, 200], [300, 196], [180, 184], [70, 168]];
+  // Dark-red rim first, then the black interior, so the mouth has a lip.
+  g.fillStyle = '#7a1d12';
+  g.beginPath();
+  g.moveTo(upper[0][0] - 6, upper[0][1] - 8);
+  for (const [x, y] of upper.slice(1)) g.lineTo(x, y - 8);
+  g.lineTo(512, 74);
+  g.lineTo(512, 188);
+  for (const [x, y] of lower) g.lineTo(x, y + 8);
+  g.closePath();
+  g.fill();
+  g.fillStyle = '#120c08';
+  g.beginPath();
+  g.moveTo(upper[0][0], upper[0][1]);
+  for (const [x, y] of upper.slice(1)) g.lineTo(x, y);
+  g.lineTo(512, 78);
+  g.lineTo(512, 184);
+  for (const [x, y] of lower) g.lineTo(x, y);
+  g.closePath();
+  g.fill();
+  // Teeth: white triangles along both jaw edges, bigger at the gape.
+  g.fillStyle = '#f4ede0';
+  function tooth(x, yBase, size, down) {
+    g.beginPath();
+    g.moveTo(x - size * 0.55, yBase);
+    g.lineTo(x + size * 0.55, yBase);
+    g.lineTo(x, yBase + (down ? size : -size));
+    g.closePath();
+    g.fill();
+  }
+  for (const [x, y, s] of [[150, 82, 26], [230, 72, 30], [310, 66, 34], [390, 63, 38], [465, 66, 40]]) {
+    tooth(x, y + 4, s, true); // upper teeth point down, base just inside the mouth
+  }
+  for (const [x, y, s] of [[150, 180, 26], [230, 190, 30], [310, 193, 34], [390, 195, 38], [465, 191, 40]]) {
+    tooth(x, y - 4, s, false); // lower teeth point up
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.0, 0.42),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }),
+  );
+  mesh.userData.noShadow = true;
+  return mesh;
+}
+
 export function buildPlane(scene) {
   // A whisper of emissive on the red so the plane never reads as a black silhouette
   // when the sun is behind the camera's subject (Stage B's landing frame): the red
   // stays red even on its shadow side.
   const red = new THREE.MeshLambertMaterial({ color: PALETTE.planeRed, emissive: 0x2e0a06 });
   const redSkin = new THREE.MeshLambertMaterial({ map: fuselageTexture(), emissive: 0x2e0a06 });
-  const white = new THREE.MeshLambertMaterial({ color: PALETTE.planeWhite });
   const dark = new THREE.MeshLambertMaterial({ color: 0x22242a });
   const metal = new THREE.MeshPhongMaterial({ color: 0x9aa0a8, shininess: 80 });
   const glass = new THREE.MeshPhongMaterial({
@@ -109,10 +183,16 @@ export function buildPlane(scene) {
   // Tapered fuselage: a lathe profile from the tail (y=0) to the nose (y=8),
   // rotated so the axis lies along -z, then shifted so the tail sits at z=3.4
   // and the nose at z=-4.6. Cabin radius ~0.95 where the cockpit panel lives.
+  // Stage I ("sangar"): the nose tapers HARDER and ends in a sharper point —
+  // the old profile rounded off gently (0.70 at 7.1, 0.45 at 7.7) and read
+  // friendly from the front; the new one keeps its shoulder longer, then dives
+  // to the point, so the nose reads as a beak, not a snout. Same length (8.0)
+  // and same max radius — silhouette only, no physics change (the flight model
+  // never reads the mesh).
   const profile = [
     [0.02, 0], [0.30, 0.25], [0.50, 1.0], [0.75, 2.0], [0.90, 3.0],
     [0.95, 3.8], [0.95, 4.6], [0.92, 5.3], [0.85, 6.0], [0.78, 6.6],
-    [0.70, 7.1], [0.45, 7.7], [0.12, 8.0],
+    [0.66, 7.1], [0.44, 7.5], [0.22, 7.8], [0.06, 8.0],
   ].map(([r, y]) => new THREE.Vector2(r, y));
   const fuselage = new THREE.Mesh(new THREE.LatheGeometry(profile, 16), redSkin);
   fuselage.rotation.x = -Math.PI / 2;
@@ -120,8 +200,12 @@ export function buildPlane(scene) {
   group.add(fuselage);
 
   // Cowling: a slightly wider short drum around the engine, with dark cooling
-  // inlets on each side, plus the spinner up front.
-  const cowling = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 0.86, 1.0, 14), red);
+  // inlets on each side, plus the spinner up front. Stage I ("sangar"): the
+  // cowling is CHARCOAL now, not red — a black engine cowl against the red
+  // fuselage is the single biggest warbird cue, and it makes the shark mouth
+  // below read. The spinner is bigger and dark too (was white, 0.32) — a pale
+  // spinner read like a toy; the dark one reads like a weapon.
+  const cowling = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 0.86, 1.0, 14), dark);
   cowling.rotation.x = Math.PI / 2;
   cowling.position.z = -3.9;
   group.add(cowling);
@@ -129,16 +213,27 @@ export function buildPlane(scene) {
     const inlet = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.35, 0.7), dark);
     inlet.position.set(side * 0.8, -0.15, -3.85);
     group.add(inlet);
-    // Exhaust stubs under the cowling.
-    const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.5, 6), dark);
+    // Exhaust stubs under the cowling — longer and thicker now, so they read
+    // as pipes instead of dots.
+    const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.7, 6), dark);
     exhaust.rotation.x = Math.PI / 2;
     exhaust.position.set(side * 0.42, -0.62, -3.7);
     group.add(exhaust);
   }
-  const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.7, 10), white);
+  const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.9, 10), dark);
   spinner.rotation.x = -Math.PI / 2;
   spinner.position.z = -4.75;
   group.add(spinner);
+
+  // Stage I: the shark mouth on the cowling — one marking, both sides, the
+  // gape toward the nose (mirrored canvases: the decal's canvas +x maps to
+  // the nose on the right side, to the tail on the left).
+  for (const side of [-1, 1]) {
+    const mouth = sharkMouthDecal(side < 0);
+    mouth.position.set(side * 0.86, -0.05, -3.9);
+    mouth.rotation.y = side * Math.PI / 2;
+    group.add(mouth);
+  }
 
   const canopy = new THREE.Mesh(new THREE.SphereGeometry(1.0, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), glass);
   canopy.scale.set(0.9, 0.75, 1.5);
@@ -155,7 +250,7 @@ export function buildPlane(scene) {
     group.add(decal);
   }
 
-  // Wing: red slab with white tips, flap + aileron separation lines on the
+  // Wing: red slab with charcoal tips, flap + aileron separation lines on the
   // trailing edge, and struts to the fuselage. Stage F, second pass: the wing
   // sits HIGH (y 1.32, was 1.05) — a proper high-wing with a visible gap over
   // the cabin. At 1.05 its red front face filled the middle of the windshield
@@ -178,7 +273,10 @@ export function buildPlane(scene) {
   wing.position.set(0, 1.36, -0.4);
   group.add(wing);
   for (const side of [-1, 1]) {
-    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.22, 1.9), white);
+    // Stage I ("sangar"): the wingtips are CHARCOAL now, not white — dark tips
+    // against the red wing read aggressive from every angle, and they tie the
+    // wing to the black cowling and tail.
+    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.22, 1.9), dark);
     tip.position.set(side * 5.45, 1.36, -0.4);
     group.add(tip);
     const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 2.9, 6), dark);
@@ -206,7 +304,7 @@ export function buildPlane(scene) {
   landingLight.rotation.x = -Math.PI / 2;
   group.add(landingLight);
 
-  // Tail: tailplane, fin with a rudder hinge line and titles, white fin tip.
+  // Tail: tailplane, fin with a rudder hinge line and titles, charcoal fin tip.
   const tailplane = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.22, 1.1), red);
   tailplane.position.set(0, 0.35, 3.1);
   group.add(tailplane);
@@ -216,7 +314,7 @@ export function buildPlane(scene) {
   const rudderLine = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.5, 0.04), dark);
   rudderLine.position.set(0, 0.9, 3.72);
   group.add(rudderLine);
-  const finTip = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.4, 1.4), white);
+  const finTip = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.4, 1.4), dark);
   finTip.position.set(0, 1.65, 3.1);
   group.add(finTip);
   for (const side of [-1, 1]) {

@@ -916,7 +916,15 @@ function buildVolcanoDetails(scene) {
  *  water's edge: white with red bands, a cottage, a lamp and a beam that sweeps
  *  the sea surface west down the strait toward the home strip, where the planes
  *  fly. The minimap reads the same LIGHTHOUSE constant, so its marker can never
- *  drift from the tower. */
+ *  drift from the tower.
+ *  Stage I: the lamp is a LIGHT, not a fixture — it is OFF in daylight. A
+ *  lighthouse lamp burning at noon is wrong (the user caught it in the Stage H
+ *  cover shot: a beam sweeping the sea under a bright midday sun). The beam,
+ *  the glow and the lit lamp core all switch together through setLight(), which
+ *  buildWorld hands to main.js: on only for the Storm Courier (dark sky by the
+ *  front), off for the two daylight missions. The tower, bands, cottage and
+ *  plinth are the landmark and never change; the minimap marker is a map
+ *  symbol, not a light, and is untouched. Default state is OFF. */
 function buildLighthouse(scene) {
   const lx = LIGHTHOUSE.x;
   const lz = LIGHTHOUSE.z;
@@ -962,9 +970,14 @@ function buildLighthouse(scene) {
     band.position.y = by;
     house.add(band);
   }
+  // Stage I: the lamp room glass is DARK by day (an unlit lamp), bright only
+  // when the light is on — a MeshBasic sphere is lit by definition, so it can
+  // never be the daylight state. setLight() below swaps the material.
+  const lampGlassMat = new THREE.MeshLambertMaterial({ color: 0x2f3e46 });
+  const lampLitMat = new THREE.MeshBasicMaterial({ color: 0xfff6d8 });
   const lamp = new THREE.Mesh(
     new THREE.SphereGeometry(1.8, 10, 8),
-    new THREE.MeshBasicMaterial({ color: 0xfff6d8 }),
+    lampGlassMat,
   );
   lamp.position.y = 8 + 33;
   house.add(lamp);
@@ -991,8 +1004,10 @@ function buildLighthouse(scene) {
   // The beam sweeps the SEA, not the sky: it points west-south-west down the
   // strait toward the home strip — the group is yawed ~9.5° south of west, the
   // direction from the lighthouse to the home strip — and tilts ~5° down so its
-  // far end kisses the water 400 m out. At midday it is a faint haze (opacity
-  // 0.18), not a searchlight, but it is there.
+  // far end kisses the water 400 m out. Stage I: it starts OFF (visible =
+  // false) and only setLight(true) shows it — at midday it used to sit there
+  // as a faint haze (opacity 0.18), which is exactly the wrong look the user
+  // caught: a beam has no business burning under a bright sun.
   const beamGroup = new THREE.Group();
   beamGroup.rotation.y = 0.165;
   const beam = new THREE.Mesh(
@@ -1008,6 +1023,7 @@ function buildLighthouse(scene) {
   beam.rotation.z = -Math.PI / 2 + 0.09;
   beam.position.set(-199, 8 + 33 - 17, 0);
   beamGroup.add(beam);
+  beamGroup.visible = false;
   house.add(beamGroup);
   const canvas = document.createElement('canvas');
   canvas.width = 64;
@@ -1023,8 +1039,24 @@ function buildLighthouse(scene) {
   }));
   glow.position.y = 8 + 33;
   glow.scale.set(50, 50, 1);
+  // Stage I: the halo starts OFF with the beam — a glowing lamp room at noon
+  // is the same mistake as the beam.
+  glow.visible = false;
   house.add(glow);
   scene.add(house);
+  // Stage I: one switch for the whole lamp — beam, halo and lit core together,
+  // so the three can never disagree about whether the light is on. main.js
+  // calls this from reset() with (missionId === 'storm').
+  let lightOn = false;
+  return {
+    get isOn() { return lightOn; },
+    setLight(on) {
+      lightOn = !!on;
+      beamGroup.visible = lightOn;
+      glow.visible = lightOn;
+      lamp.material = lightOn ? lampLitMat : lampGlassMat;
+    },
+  };
 }
 
 /** True when a cloud centre would sit in front of the volcano hero or the
@@ -1259,8 +1291,8 @@ export function buildWorld(scene) {
   buildTrees(scene, rng);
   buildDetail(scene, rng);
   buildVolcanoDetails(scene);
-  buildLighthouse(scene);
+  const lighthouseLight = buildLighthouse(scene);
   buildClouds(scene, rng);
   const stormWall = buildStormWall(scene, rng);
-  return { stormWall, sun };
+  return { stormWall, sun, lighthouseLight };
 }
