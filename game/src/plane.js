@@ -33,15 +33,22 @@ function fuselageTexture() {
   // Stage I exterior shot proved the 26 px band vanished against the black
   // cowling; against the red nose it must read as a razor line from the
   // three-quarter front view.
+  // Stage I-fix 2 (user: "Perbaiki semuanya jangan ada cacatnya satupun"):
+  // the 32 px band still reads thin from the three-quarter front view — the
+  // fuselage is foreshortened from that angle, so the band needs real width.
+  // 32 -> 48 px (~0.56 m, as wide as the belly stripe) with a 9 px
+  // pinstripe, and longer (v 20..495, nose to tail) so it runs the whole
+  // side and meets the shark mouth at the cowling instead of stopping short
+  // of it. Shark mouth, PK-LNI and the dark spinner are untouched.
   g.fillStyle = '#202227';
-  g.fillRect(77, 30, 32, 450);
-  g.fillRect(403, 30, 32, 450);
+  g.fillRect(77, 20, 48, 475);
+  g.fillRect(403, 20, 48, 475);
   // One thin white pinstripe along the TOP edge of each cheatline (the edge
   // toward the fuselage top: smaller u on the right side, larger u on the
   // left) — the white line makes the black band read razor-sharp.
   g.fillStyle = PALETTE.planeWhite;
-  g.fillRect(71, 30, 6, 450);
-  g.fillRect(435, 30, 6, 450);
+  g.fillRect(68, 20, 9, 475);
+  g.fillRect(451, 20, 9, 475);
   // Longeron lines (constant u, running nose to tail) — heavier now, so the
   // panel work reads at a distance instead of washing out in the sun.
   g.strokeStyle = 'rgba(120, 20, 10, 0.6)';

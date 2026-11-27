@@ -234,6 +234,30 @@ function showResults(success, reason) {
   document.body.classList.add('menu-open');
   document.getElementById('results-title').textContent =
     `${mission.name.toUpperCase()} — ${success ? 'COMPLETE' : 'FAILED'}`;
+  // Stage I-fix 2 (self-audit): the results backdrop used to be whatever the
+  // camera saw when the mission ended — usually the INSIDE of the last ring,
+  // turned green, filling half the frame like a curtain. Pull the camera up
+  // to a high three-quarter vantage over the plane instead, so the results
+  // read over the archipelago, not over a wall of green. The loop keeps
+  // rendering with this camera while the results screen is up (updateCamera
+  // only runs on title/play); Retry/Next/Menu reset it through reset().
+  // Stage I-fix 2, third pass: the ring-aware attempt still left a green ring
+  // in frame — the 220 m offset can land next to ANOTHER ring of the course,
+  // and the ring beyond the plane stays in the view. Fix it at the root: the
+  // mission is over, so the course markers go away (reset() brings them back
+  // for Retry / Next / Menu), and the camera anchors on the volcano — the
+  // far side of the plane from the (3900, 0) peak, 220 m out — so the results
+  // read over the volcano and the sea, not over course furniture. The camera
+  // sits only 70 m above the plane and aims 30 m above it: the first attempt
+  // at +120 m looked down ~27°, which put the volcano's 650 m peak (only ~9°
+  // above the horizon from here) ABOVE the frame and left a brown hillside
+  // filling it; at ~10° of depression the peak and the sea horizon fall
+  // inside the upper frame instead.
+  rings.setVisible(false);
+  const vx = 3900 - flight.x, vz = 0 - flight.z;
+  const vlen = Math.hypot(vx, vz) || 1;
+  camera.position.set(flight.x - (vx / vlen) * 220, flight.y + 70, flight.z - (vz / vlen) * 220);
+  camera.lookAt(flight.x, flight.y + 30, flight.z);
   document.getElementById('results-sub').textContent = reason;
   document.getElementById('results-score').textContent = String(flight.score);
   document.getElementById('results-rings-label').textContent = ringLabel;
@@ -529,12 +553,22 @@ function runShot(name) {
   setCamMode(name === 'cover' ? 'far' : name.startsWith('cockpit') ? 'cockpit' : 'chase');
   updateCamera(1);
   if (name === 'exterior') {
-    // Walkaround: a parked plane, three-quarter FRONT view, close enough to read
-    // the new fuselage skin, decals, nav lights and wheel pants. The nose points
-    // north (-z), so the camera stands north-east of the plane — the old spot
-    // (z +9) was behind the tail and showed the rear, not the front.
-    camera.position.set(flight.x + 9, flight.y + 2.5, flight.z - 9);
-    camera.lookAt(flight.x, flight.y + 0.5, flight.z);
+    // Walkaround: a parked plane, three-quarter view, close enough to read
+    // the new fuselage skin, decals, nav lights and wheel pants. The nose
+    // points north (-z) and the "36" is painted to be read from the SOUTH
+    // (the runway-36 approach), so the camera stands SOUTH of the numbers
+    // looking north: the numbers read the right way up, whole, in the lower
+    // frame, with the plane standing on the strip beyond them.
+    // Stage I-fix 2, second pass: the first attempt stood NORTH of the plane
+    // (z -14) looking south through it — the numbers read upside-down
+    // ("9") and the wing cut across the "3". The camera moves to the south
+    // side (z +30, 17 m past the numbers' centre) and aims at the midpoint
+    // between the numbers and the plane (z +6): the "36" (each digit ~5 m
+    // wide, the pair ~13 m) fills the lower frame the right way up, the
+    // plane stands above it at ~22% of the frame width, and the east-side
+    // cheatline faces the camera.
+    camera.position.set(flight.x + 14, flight.y + 5, flight.z + 30);
+    camera.lookAt(flight.x, flight.y + 1, flight.z + 6);
   }
   rings.update(0);
   // The rings shot stops just before the second ring, after banking the first:

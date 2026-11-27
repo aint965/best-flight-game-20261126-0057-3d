@@ -2,7 +2,7 @@
 // The game is this directory's game/ folder: plain static files a desktop browser loads offline
 // (game/index.html and its ES modules, Three.js vendored under game/vendor/, no network request).
 // Three missions — Ring Run, Island Hop, Storm Courier — all proven completable in the
-// Node simulation (flight3d-sim-i2.mjs) and captured in the 4-shot dossier below.
+// Node simulation (flight3d-sim-i3.mjs) and captured in the 4-shot dossier below.
 // Stage D polish (2026-11-26): textured foreground detail (bushes, rocks, flowers)
 // plus a grain texture on the terrain so close grass is not a flat field; a 120 m
 // lighthouse that reads as a tower from 3 km, with a short beam; finer sun glitter
@@ -22,7 +22,7 @@
 // is complete — mission briefing before every start, a full pause menu, a controls
 // overlay, and a results screen with the score breakdown (rings, landings, time
 // bonus) and run stats. Sound and camera each have one source of truth, so the HUD
-// button, the title button and the pause menu can never disagree.
+// button, the title button and the pause button can never disagree.
 // Stage F, second pass (2026-11-26, user: "Mercusuar di atas gunung tidak
 // realistis" + "Kontras warna pohon sama tanahnya gk sesuai" + "Suasananya buat
 // siang coba"): the lighthouse moves off the volcano to the south tip of Pulau
@@ -55,7 +55,7 @@
 // trees shade the grass, the wing shades the fuselage, the lighthouse tower
 // shades the shore, the plane shades the strip. The light rig follows the same
 // skill: one directional key at 2.5 (the skill's ~2–3 range), a hemisphere
-// fill at 0.7, a modest camera fill at 0.35 — one shadow-casting light only, no
+// fill at 0.65, a modest camera fill at 0.35 — one shadow-casting light only, no
 // point-light shadows (they would render the scene 6×). The sun is brighter
 // (2.5) and the ambient bounces weaker, so lit reads bright and shadow reads
 // deep. The same skill's three-place check (renderer.shadowMap.enabled +
@@ -171,6 +171,62 @@
 // The beam and the lamp core are MeshBasic, so the grade cannot dim them —
 // the beam reads better against the dark sky. Same flight model, same sim
 // scores (2875/2345/2790), same lighthouse position and lamp rule.
+// Stage I-fix 2 (2026-11-27, user: "Perbaiki semuanya jangan ada cacatnya
+// satupun. Biar tidak ada banyak perbaikan." — audit-first: every defect
+// found in a full screenshot audit is fixed in this one round): (1) the top
+// bar is still a dark slab across ~5% of the frame — it thins to 0.035 m
+// (the pillar width), a slim frame line, and the glass gains ~2% at the top.
+// The bar is NOT raised: above the wing leading edge's angle its background
+// would be sky, and a dark line against blue reads MORE prominent, not less.
+// (2) The glareshield lip drops a half-step more, 0.72 -> 0.70 (compass and
+// shadow plane ride with it), so the sightline reaches ~6.5° below the
+// horizon and the glass grows ~0.8% at the bottom; the 12 gauges and the
+// short-final threshold are verified whole in the new shots. A wider FOV was
+// considered and REJECTED on geometry: the glass is bounded by the wing
+// leading edge (~19° up) and the lip (~6° down) — a fixed ~25° of the 62°
+// field — so a wider field would hold the same 25° over a bigger field and
+// the glass FRACTION would shrink while the khaki band above the wing would
+// grow. (3) The cheatline widens 32 -> 48 px with a 9 px pinstripe and runs
+// nose to tail (v 20..495), so it reads from the three-quarter front view
+// where the foreshortened fuselage thinned it to a hairline. (4) The
+// exterior walkaround camera pulls back (9 -> 14 m) and aims at the midpoint
+// between the plane and the runway numbers, so the whole "36" reads in the
+// lower frame with the plane standing on it — the old spot cut it at the
+// left edge (the numbers are 34 m wide and sit only 13 m south of the
+// parked plane). (5) The trees stop being cones: each crown layer is a wavy
+// 8-segment pine layer (same triangle budget — the driver measures 2310
+// ms/frame against a 3000 ms bound), the trunk is taller (4.2 m) and slimmer
+// so it reads below the canopy, the crown has a light gradient (dark base,
+// sunlit top), and the forest grows in groves with clearings instead of a
+// uniform carpet. (6) The volcano stops being a layer cake: the strata gain
+// a second, thinner band frequency, green gully fingers climb the lower
+// flank where the noise says water runs, scree spills below the ash cap,
+// and the treeline is a ragged height-and-gully gradient instead of a
+// contour line. (7) The cover staging rises (145 -> 165) so the gold ring
+// drops from ~19% to ~31% from the top of the frame, reading against the
+// volcano's dark upper slope instead of empty sky; the cloud-exclusion cones
+// move up with the new camera height. (8) Self-audit leftovers: the anvil
+// cloud puffs were 8:1 flat discs — narrower, thicker and rarer now, and the
+// ordinary puffs rounder, so the sky reads volumetric; the sea glitter
+// streaks were white scratches — shorter (5–10 m) and dimmer now; the beach
+// gains a wet-sand band at the waterline; and the results screen no longer
+// shows the inside of the last green ring as its backdrop — the camera pulls
+// up to a high scenic vantage over the plane when the results open. Two
+// further passes were needed after viewing the attempts: a fixed offset still
+// left a ring filling half the frame, and a ring-aware offset could land next
+// to another ring — so the course markers are now hidden when the mission ends
+// (reset() brings them back for Retry / Next / Menu) and the camera anchors on
+// the volcano, 220 m out on the far side of the plane from the (3900, 0) peak,
+// 70 m up and aiming 30 m above the plane so the peak and the sea horizon fall
+// inside the frame (the first attempt at +120 m looked down too steeply and the
+// peak cleared the top of the frame).
+// The same second pass restaged the exterior walkaround: the first attempt
+// stood north of the plane looking south, which read the "36" upside-down
+// with the wing across the "3" — the camera now stands south of the numbers
+// looking north, so the "36" reads the right way up, whole, in the lower
+// frame with the plane beyond it. Same
+// flight model, same sim scores (2875/2345/2790), same missions, same
+// lighthouse rule.
 // This program copies game/ and screenshots/ from beside this file to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 // The copy is byte for byte the same on every run: no timestamps, no randomness here.
@@ -250,10 +306,49 @@ if (!planeJs.includes('opacity: 0.15')) {
 }
 console.log('prop: faint blades (opacity 0.15) present in game/src/plane.js');
 
+// Stage I-fix 2: the top bar is a SLIM frame line (0.035 m), not the 0.06 m
+// slab that crossed ~5% of the windshield — and the glareshield lip sits at
+// 0.70, not 0.72. Refuse a hand-in that put the thick bar or the high lip back.
+const cockpitJs = readFileSync(join(gameDir, 'src', 'cockpit.js'), 'utf8');
+if (!cockpitJs.includes('BoxGeometry(1.5, 0.035, 0.06)')) {
+  throw new Error('main.ts: slim top bar (0.035 m) missing from game/src/cockpit.js');
+}
+if (!cockpitJs.includes('position.set(0, 0.70, -0.60)')) {
+  throw new Error('main.ts: lowered glareshield lip (0.70) missing from game/src/cockpit.js');
+}
+console.log('cockpit frame: slim top bar + lowered lip present in game/src/cockpit.js');
+
+// Stage I-fix 2: the cheatline is 48 px wide with a 9 px pinstripe — the 32 px
+// band vanished against the foreshortened fuselage from the three-quarter
+// front view. Refuse a hand-in that thinned it back.
+if (!planeJs.includes('fillRect(77, 20, 48, 475)')) {
+  throw new Error('main.ts: wide cheatline (48 px) missing from game/src/plane.js');
+}
+console.log('livery: wide cheatline present in game/src/plane.js');
+
+// Stage I-fix 2: the results screen opens over a high scenic vantage, not
+// over the inside of the last green ring — the course markers are hidden when
+// the mission ends (reset() brings them back for Retry / Next / Menu) and the
+// camera anchors on the volcano (far side of the plane from the (3900, 0)
+// peak, 220 m out, 120 m up), so the results read over the volcano and the
+// sea. Refuse a hand-in that lost the ring-hiding or the volcano anchor.
+if (!mainJs.includes('rings.setVisible(false)') || !mainJs.includes('3900 - flight.x')) {
+  throw new Error('main.ts: results scenic camera (hide rings + volcano anchor) missing from game/src/main.js');
+}
+console.log('results: scenic camera (rings hidden, volcano anchor) present in game/src/main.js');
+
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 const shotFiles = existsSync(shotsDir)
   ? readdirSync(shotsDir).filter((name) => !name.startsWith('.'))
   : [];
+// Stage I-fix 2: the dossier is exactly four staged shots — cover, cruise,
+// rings, landing. Refuse a hand-in whose screenshots/ holds a partial set or
+// a stray file, instead of shipping the wrong dossier silently.
+const EXPECTED_SHOTS = ['1-cover.jpg', '2-cruise.jpg', '3-rings.jpg', '4-landing.jpg'];
+const missing = EXPECTED_SHOTS.filter((name) => !shotFiles.includes(name));
+const stray = shotFiles.filter((name) => !EXPECTED_SHOTS.includes(name));
+if (missing.length > 0) throw new Error(`main.ts: dossier screenshots missing: ${missing.join(', ')}`);
+if (stray.length > 0) throw new Error(`main.ts: unexpected files in screenshots/: ${stray.join(', ')}`);
 if (shotFiles.length > 0) cpSync(shotsDir, join(out, 'screenshots'), { recursive: true });
 
 writeFileSync(join(out, 'dossier.json'), buildDossier(out, DOSSIER_CAPS));

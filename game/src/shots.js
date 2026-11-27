@@ -297,7 +297,16 @@ export function stageShot(sim, name) {
   // The flight is shortened 6 s -> 4 s: the camera stops ~70 m further west,
   // the ring is ~170 m out and ~9° across, and its whole disc sits inside
   // the frame with margin, clear of the HUD panels on the right.
-  sim.reset({ x: 1000, y: 145, z: -180, heading: 1.57, speed: 34, throttle: 72 }, 'rings');
+  // Stage I-fix 2 (user: "Perbaiki semuanya jangan ada cacatnya satupun"):
+  // the ring sat too HIGH in the cover — its top ~60 px from the frame edge,
+  // centre ~19% from the top, floating in empty sky above the volcano. The
+  // plane starts higher (145 -> 165): the ring drops to ~5° above the
+  // horizon, ~31% from the top, still ~160 px tall (same ~170 m distance),
+  // now reading against the volcano's dark upper slope — gold on rock, not
+  // gold on empty sky. The volcano stays the hero (peak ~7.5° up from here)
+  // and the lighthouse stays low mid-frame. blocksHero's cover cones move
+  // with the new camera height (terrain.js).
+  sim.reset({ x: 1000, y: 165, z: -180, heading: 1.57, speed: 34, throttle: 72 }, 'rings');
   const rings = sim.rings;
   let flown = 0;
   for (let t = 0; t < 4; t += STEP) {

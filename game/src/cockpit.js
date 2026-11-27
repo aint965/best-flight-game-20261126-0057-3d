@@ -88,8 +88,23 @@ export function buildCockpit(planeGroup) {
   // gauge row, which the brief forbids. The six-pack top (y ~0.60) still
   // clears the lowered lip: the sightline to it passes a few millimetres
   // under the lip's front-bottom edge, so no gauge is lost to the shield.
+  // Stage I-fix 2: the lip drops a half-step more, 0.72 -> 0.70. The sightline
+  // over the lip reaches ~6.5° below the horizon (was ~6°), so the glass
+  // grows ~0.8% of frame height at the bottom and the threshold sits a touch
+  // further from the lip on short final. The compass (0.78 -> 0.76) and the
+  // glareshadow plane (0.58 -> 0.56) ride down with it, so their offsets are
+  // unchanged. The six-pack top stays clear: the sightline to the top dial
+  // (y ~0.60) passes ~0.58 at the lip's front edge, ~0.08 below the lowered
+  // lip (0.665) — verified in the cruise shot, all 12 gauges stay whole.
+  // A wider FOV was considered for this round and REJECTED on geometry, not
+  // taste: the glass is bounded by the wing leading edge (~19° up) and the
+  // lip (~6° down) — a fixed ~25° of the 62° field. A wider field would hold
+  // the same 25° over a bigger field, so the glass FRACTION would shrink
+  // (25/66 = 38% vs 25/62 = 40%) while the khaki band above the wing would
+  // GROW (the frame top rises but the wing does not). FOV is not the lever;
+  // the bar and the lip are.
   const glareshield = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.07, 0.38), darkLeather);
-  glareshield.position.set(0, 0.72, -0.60);
+  glareshield.position.set(0, 0.70, -0.60);
   glareshield.rotation.x = 0.15;
   group.add(glareshield);
   // The glareshield's own shadow: a translucent dark plane hanging below its lip
@@ -99,11 +114,12 @@ export function buildCockpit(planeGroup) {
   // a crisp line of shade with a visible edge, the way a real glareshield
   // throws one at noon — and it stops above the six-pack, so no gauge is ever
   // shaded. Stage H: the plane rides down with the lip, 0.61 -> 0.58.
+  // Stage I-fix 2: rides down with the lip (0.58 -> 0.56); offset unchanged.
   const glareshadow = new THREE.Mesh(
     new THREE.PlaneGeometry(1.5, 0.30),
     new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }),
   );
-  glareshadow.position.set(0, 0.58, -0.70);
+  glareshadow.position.set(0, 0.56, -0.70);
   glareshadow.rotation.x = 0.35;
   group.add(glareshadow);
   const compassCanvas = document.createElement('canvas');
@@ -116,7 +132,7 @@ export function buildCockpit(planeGroup) {
     new THREE.PlaneGeometry(0.30, 0.056),
     new THREE.MeshBasicMaterial({ map: compassTex }),
   );
-  compass.position.set(0, 0.78, -0.62); // Stage H: rides down with the lowered lip (was 0.83).
+  compass.position.set(0, 0.76, -0.62); // Stage I-fix 2: rides down with the lowered lip (was 0.78).
   compass.rotation.x = -0.5;
   group.add(compass);
 
@@ -148,7 +164,15 @@ export function buildCockpit(planeGroup) {
     pillar.rotation.x = 0.15;
     group.add(pillar);
   }
-  const topBar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.06), pillarMat);
+  // Stage I-fix 2 (user: "Perbaiki semuanya jangan ada cacatnya satupun"):
+  // the top bar is STILL a dark slab across ~5% of the frame — it is 0.06 m
+  // tall, as thick as a structural member, but it only frames the glass. It
+  // thins to 0.035 m (the pillar width): a slim frame line, not a bar. The
+  // glass gains ~2% of frame height at the top. The bar is NOT raised: it
+  // sits at the wing leading edge's angle (~19° up), and above that its
+  // background would be sky instead of the khaki wing — a dark line against
+  // blue reads MORE prominent, not less.
+  const topBar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.035, 0.06), pillarMat);
   topBar.position.set(0, 1.34, -0.92);
   group.add(topBar);
 

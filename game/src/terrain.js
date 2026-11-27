@@ -301,8 +301,13 @@ function buildTerrainMesh(scene) {
     const fine = valueNoise(wx, wz, 55, SEED + 13);
     const speckle = valueNoise(wx, wz, 12, SEED + 23);
     if (h < 0.3) c.copy(cSeabed);
-    else if (h < 3.2) c.copy(cSand).lerp(cGrassA, smoothstep(1.2, 3.2, h));
-    else {
+    else if (h < 3.2) {
+      c.copy(cSand).lerp(cGrassA, smoothstep(1.2, 3.2, h));
+      // Stage I-fix 2: a wet-sand band at the waterline — the sand just above
+      // the sea is darker (damp), so the shoreline reads as a line instead of
+      // the beach fading into the grass without an edge.
+      if (h > 0.3 && h < 1.4) c.multiplyScalar(0.82);
+    } else {
       // Stage G: the mottling is pushed a touch harder (fine 0.50, speckle
       // 0.18 — was 0.45/0.12) so the ground has visible variation even where
       // no bush or tree sits on it.
@@ -335,12 +340,29 @@ function buildTerrainMesh(scene) {
         if (valueNoise(wx, wz, 25, SEED + 37) > 0.62) c.lerp(cRockDark, 0.55);
         if (h > 535 && h < 565) c.lerp(cRim, 0.45 * (0.6 + 0.4 * Math.sin(ang * 5 + n * 3)));
       } else if (h > 120) {
+        // Stage I-fix 2: the strata get a SECOND, thinner band frequency, so
+        // the slope reads as sedimentary layering (thick + thin beds), not one
+        // sine wave — and green GULLY FINGERS climb the lower flank: where the
+        // streak noise is low (a gully, holding soil and water) the grass
+        // holds on up to ~220 m; where it is high (a ridge, bare rock) the
+        // rock takes over early. Vegetation follows the water, the way it
+        // does on a real volcano.
         const band = 0.5 + 0.5 * Math.sin(h * 0.065 + n * 2.2);
+        const band2 = 0.5 + 0.5 * Math.sin(h * 0.16 + n * 4.0);
         c2.copy(cRockDark).lerp(cAsh, band * 0.8);
+        c2.lerp(cRock, band2 * 0.25);
         c.lerp(c2, 0.9);
         c.multiplyScalar(0.7 + 0.6 * streak);
+        if (h < 220) c.lerp(cGrassA, (1 - smoothstep(120, 220, h)) * (1 - streak) * 0.5);
+        // Scree: loose dark rock fragments spilling just below the ash cap.
+        if (h > 380 && valueNoise(wx, wz, 25, SEED + 37) > 0.55) c.lerp(cRockDark, 0.4);
       } else {
-        c.lerp(cRock, 0.4);
+        // Stage I-fix 2: the volcano's FOOT is not uniform rock either — the
+        // green-to-rock gradient follows height AND the gully/ridge noise:
+        // gullies stay grassy low down, ridges turn to rock early, so the
+        // treeline is ragged instead of a contour line.
+        const rockAmt = clamp(0.15 + 0.45 * smoothstep(60, 180, h) + 0.35 * streak, 0, 0.9);
+        c.lerp(cRock, rockAmt);
         c.multiplyScalar(0.75 + 0.5 * streak);
       }
     }
@@ -392,18 +414,22 @@ function buildSea(scene, rng) {
     const col = warm.clone().multiplyScalar(rng.range(0.25, 0.5));
     quads.push({ geometry: g, matrix: m, color: col });
   }
-  for (let i = 0; i < 220; i += 1) {
+  for (let i = 0; i < 170; i += 1) {
     // The band core: long thin streaks along the path, brightest toward the sun.
     // Stage E: shorter and hair-thin (was 14–30 m) — the Stage D streaks still read
     // as white scratches in the cover foreground at close range.
+    // Stage I-fix 2: shorter STILL (5–10 m, was 8–18) and dimmer (0.7, was
+    // 0.95) — at 8–18 m the individual streaks still resolve as white
+    // scratches on the sea in the cover frame. The soft sun path below
+    // carries the glitter read; these are only the sparkle on top of it.
     const x = rng.range(-800, 4200);
     const z = -150 + rng.range(-110, 110);
-    const g = new THREE.PlaneGeometry(rng.range(8, 18), rng.range(0.8, 1.5));
+    const g = new THREE.PlaneGeometry(rng.range(5, 10), rng.range(0.8, 1.5));
     const m = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
     m.setPosition(x, 0.32, z);
     const fadeZ = 1 - Math.min(1, Math.abs(z + 150) / 110) * 0.7;
     const fadeX = 1 - Math.min(1, Math.max(0, x - 800) / 3400) * 0.75;
-    const col = warm.clone().multiplyScalar(0.95 * fadeZ * fadeX);
+    const col = warm.clone().multiplyScalar(0.7 * fadeZ * fadeX);
     quads.push({ geometry: g, matrix: m, color: col });
   }
   for (let i = 0; i < 140; i += 1) {
@@ -608,6 +634,45 @@ function distToRiver(x, z) {
   return best;
 }
 
+/** A pine crown layer that is NOT a perfect cone — Stage I-fix 2 (user:
+ *  "Perbaiki semuanya jangan ada cacatnya satupun"): the old 6-sided cones
+ *  read as Christmas trees because every side is straight and every tree
+ *  shares one silhouette. This is still a cone at heart (16 triangles, not
+ *  80 — the driver measures 2310 ms/frame against a 3000 ms bound, so a
+ *  faceted blob per tree would blow the frame budget), but its base ring is
+ *  wavy: each vertex's radius follows two sine lobes of its angle, so the
+ *  silhouette bulges and pinches around the crown, and the apex leans a
+ *  touch off-centre. The jitter is a pure function of angle (not of vertex
+ *  index), so the seam vertices stay welded. Each layer gets its own seed,
+ *  so the four layers of one tree never share a profile — and the per-tree
+ *  scale jitter, lean and colour variation do the rest. Normals are
+ *  recomputed after the jitter so the Lambert shading follows the new shape. */
+function pineLayerGeo(radius, height, seed) {
+  const geo = new THREE.ConeGeometry(radius, height, 8);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i += 1) {
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    const r = Math.hypot(x, z);
+    if (r < 0.01) continue; // apex / base centre: nothing to wave
+    const a = Math.atan2(z, x);
+    const f = 1 + 0.14 * Math.sin(a * 2 + seed) + 0.09 * Math.sin(a * 5 + seed * 1.7);
+    pos.setX(i, x * f);
+    pos.setZ(i, z * f);
+  }
+  // A slight apex lean, fixed per layer: the crown grows off-centre, the way
+  // a real pine's leader bends toward the light.
+  const apexLean = 0.12 * radius;
+  for (let i = 0; i < pos.count; i += 1) {
+    if (pos.getY(i) > height / 2 - 0.01) {
+      pos.setX(i, pos.getX(i) + apexLean * Math.cos(seed));
+      pos.setZ(i, pos.getZ(i) + apexLean * Math.sin(seed));
+    }
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
 function buildTrees(scene, rng) {
   const spots = [];
   const boxes = [[-900, 900, -900, 900], [900, 2100, -1500, -300]];
@@ -621,6 +686,11 @@ function buildTrees(scene, rng) {
     if (h < 3 || h > 42) continue;
     if (onRunwayPlateau(x, z)) continue;
     if (distToRiver(x, z) < 32) continue;
+    // Stage I-fix 2: the forest grows in GROVES, not a uniform carpet — a
+    // slow noise field decides where trees stand, so clearings open between
+    // dense stands the way a real island forest does. Deterministic (same
+    // seed, same forest); the sim never reads tree spots, so scores cannot move.
+    if (valueNoise(x, z, 180, SEED + 51) < 0.32) continue;
     spots.push([x, h, z, rng.range(0.8, 1.5)]);
   }
   // Stage G: OLD GROWTH — ~50 big trees in tight clusters, the way a real forest
@@ -639,13 +709,19 @@ function buildTrees(scene, rng) {
       spots.push([x, h, z, rng.range(1.9, 2.6)]);
     }
   }
-  const trunkGeo = new THREE.CylinderGeometry(0.45, 0.75, 3, 5);
-  const coneGeo = new THREE.ConeGeometry(3.4, 9, 6);
-  const cone2Geo = new THREE.ConeGeometry(2.3, 6, 6);
-  const cone3Geo = new THREE.ConeGeometry(1.5, 4, 6);
+  // Stage I-fix 2: the crown layers are wavy pine layers now (see
+  // pineLayerGeo), not perfect cones — and the trunk is TALLER (4.2 m, was
+  // 3) and slimmer, so it reads as a trunk below the canopy instead of
+  // disappearing into it. Same 5 InstancedMeshes, same instance counts, so
+  // the shadow-caster count and the frame budget stay where the driver
+  // proves them.
+  const trunkGeo = new THREE.CylinderGeometry(0.38, 0.68, 4.2, 5);
+  const coneGeo = pineLayerGeo(3.4, 9, 1.3);
+  const cone2Geo = pineLayerGeo(2.3, 6, 2.9);
+  const cone3Geo = pineLayerGeo(1.5, 4, 4.7);
   // Stage H: a fourth, small top cone for the old-growth giants only — the
   // layered crown reads taller and less like a stacked Christmas tree.
-  const cone4Geo = new THREE.ConeGeometry(1.0, 3.5, 6);
+  const cone4Geo = pineLayerGeo(1.0, 3.5, 6.1);
   const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2f });
   const leafMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
   const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, spots.length);
@@ -675,7 +751,7 @@ function buildTrees(scene, rng) {
     const giant = scale > 1.8;
     s.set(sx, sy, sz);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rng.next() * Math.PI * 2);
-    p.set(x, h + 1.5 * sy, z);
+    p.set(x, h + 2.1 * sy, z); // Stage I-fix 2: taller trunk (4.2 m) rides higher.
     m.compose(p, q, s);
     trunks.setMatrixAt(i, m);
     // Stage H: the crown LEANS — each tree's upper cones are offset sideways
@@ -720,18 +796,20 @@ function buildTrees(scene, rng) {
       m.compose(p, q, s);
       cones4.setMatrixAt(i, m);
     }
-    // Stage F, second pass — the tree/ground mismatch: pines were HSL(0.33–0.37,
-    // 0.55, 0.28–0.40), a saturated pure green, while the ground is a muted
-    // yellow-olive (hue ~0.28, sat 0.30–0.38). Now hue 0.29–0.32, sat 0.42,
-    // lightness 0.30–0.42 — the same yellow-green family as the grass, a touch
-    // darker and richer, so the trees sit in the ground instead of floating on it.
-    // Stage G KEEPS that palette exactly (the user only asked for shape, not
-    // colour); giants are the same hue, just darker (lightness 0.24–0.30).
-    if (giant) col.setHSL(0.29 + rng.next() * 0.02, 0.42, 0.24 + rng.next() * 0.06);
-    else col.setHSL(0.29 + rng.next() * 0.03, 0.42, 0.30 + rng.next() * 0.12);
+    // Stage I-fix 2: the crown now has a LIGHT GRADIENT — the bottom layer
+    // sits in its own shade, the top layer catches the noon sun — so the
+    // stack reads as layered foliage with light falling through it, not four
+    // flat slices of one green. Same hue family as the grass (Stage F's fix
+    // is kept); only the lightness steps up the crown.
+    const baseH = 0.29 + rng.next() * (giant ? 0.02 : 0.03);
+    const baseL = giant ? 0.24 + rng.next() * 0.06 : 0.30 + rng.next() * 0.12;
+    col.setHSL(baseH, 0.42, baseL * 0.82);
     cones.setColorAt(i, col);
+    col.setHSL(baseH, 0.42, baseL * 0.95);
     cones2.setColorAt(i, col);
+    col.setHSL(baseH, 0.42, baseL * 1.08);
     cones3.setColorAt(i, col);
+    col.setHSL(baseH, 0.42, baseL * 1.22);
     cones4.setColorAt(i, col);
   });
   trunks.instanceMatrix.needsUpdate = true;
@@ -1077,14 +1155,16 @@ function buildLighthouse(scene) {
  *  meant to show. */
 function blocksHero(cx, cy, cz) {
   // Cover cone: from the far camera behind the staged cover plane — the plane
-  // starts at (1000, 145, -180) heading east, the far camera sits 36 m behind
-  // it at ~(964, 152, -180) — axis east. The volcano's angular box from
+  // starts at (1000, 165, -180) heading east, the far camera sits 36 m behind
+  // it at ~(964, 176, -180) — axis east. The volcano's angular box from
   // there is roughly ha -15°..+22°, va -3°..+9°; the margins allow for cloud size.
   // (Stage G moved the cover staging 400 m east so the coastal lighthouse reads
   // bigger; the cone origin moved with it. Stage H moves the staging 80 m
-  // north so the third ring is whole in frame; the cone origin moves again.)
+  // north so the third ring is whole in frame; the cone origin moves again.
+  // Stage I-fix 2 moves the staging 20 m up so the ring sits lower in the
+  // cover frame; the cone origin moves up with the camera.)
   const dx = cx - 964;
-  const dy = cy - 152;
+  const dy = cy - 176;
   const dz = cz + 180;
   if (dx > 300 && dx < 3600) {
     const ha = Math.atan2(dz, dx);
@@ -1095,7 +1175,7 @@ function blocksHero(cx, cy, cz) {
   // (1500, 41, -250) — a cloud within ~4.4° of that sightline, 300–1500 m out,
   // would sit on the tower in the frame.
   const ldx = cx - 964;
-  const ldy = cy - 152;
+  const ldy = cy - 176;
   const ldz = cz + 180;
   const lvLen = Math.sqrt(ldx * ldx + ldy * ldy + ldz * ldz);
   const laLen = Math.sqrt(536 * 536 + 111 * 111 + 70 * 70);
@@ -1167,11 +1247,18 @@ function buildClouds(scene, rng) {
     const towers = 1 + Math.floor(rng.next() * 3);
     for (let i = 0; i < puffs; i += 1) {
       const tower = i < towers;
-      const anvil = !tower && rng.next() < 0.25;
+      const anvil = !tower && rng.next() < 0.15;
       const g = new THREE.SphereGeometry(1, 10, 8);
       const m = new THREE.Matrix4();
-      const sx = (tower ? rng.range(40, 62) : anvil ? rng.range(110, 170) : rng.range(55, 115)) * scale;
-      const sy = (tower ? rng.range(36, 55) : anvil ? rng.range(13, 22) : rng.range(22, 42)) * scale;
+      // Stage I-fix 2: the "anvil" puffs were 110–170 m wide and only 13–22 m
+      // tall (aspect ~8:1) — from below they read as flat UFO discs, the one
+      // shape in the sky that breaks the volumetric read (Kestrel Ridge's
+      // cumulus is the bar). Anvils are narrower (90–140) and thicker (22–32),
+      // rarer (15%), and the ordinary puffs are rounder too (28–48 tall, was
+      // 22–42) — a cloud is a pile of near-spheres with a soft flat top, not a
+      // stack of plates. Same puff counts, same triangle counts.
+      const sx = (tower ? rng.range(40, 62) : anvil ? rng.range(90, 140) : rng.range(55, 115)) * scale;
+      const sy = (tower ? rng.range(36, 55) : anvil ? rng.range(22, 32) : rng.range(28, 48)) * scale;
       const sz = (tower ? rng.range(35, 52) : anvil ? rng.range(45, 80) : rng.range(38, 68)) * scale;
       m.makeScale(sx, sy, sz);
       const px = cx + rng.range(-80, 80) * scale;
